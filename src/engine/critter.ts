@@ -27,6 +27,12 @@ export interface CritterDefinition<Name extends string = string> {
   /** Colour names in palette order. Palette index 0 is transparent, these start at 1. */
   colourNames: readonly Name[];
   colourways: readonly Colourway<Name>[];
+  /** The colour that sets the body's hue when a colourway is built from a language. */
+  bodyColour: Name;
+  /** Colours that take the second language's hue: wings, gills, tentacles, sparkles. */
+  accentColours: readonly Name[];
+  /** Colours that never change with a language: eyes, white, cheeks. */
+  fixedColours: readonly Name[];
   /**
    * Draw one frame as palette indexes, width × height. The result must depend only
    * on the index and traits, and every motion must complete whole cycles over

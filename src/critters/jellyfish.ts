@@ -3,7 +3,9 @@ import type { Spark } from "../engine/body.ts";
 import { Canvas } from "../engine/canvas.ts";
 import { colourIndexes, defineCritter } from "../engine/critter.ts";
 import type { Point } from "../engine/mask.ts";
-import { clamp, flightPath, round, smooth, TAU } from "../engine/motion.ts";
+import { clamp, round, smooth, TAU } from "../engine/motion.ts";
+import { blinkFrames, cyclesFor, perTraits, roam, STAGE_SCALE } from "../engine/traits.ts";
+import type { Traits } from "../engine/traits.ts";
 
 const WIDTH = 180;
 const HEIGHT = 120;
@@ -28,6 +30,9 @@ const WAYPOINTS: readonly Point[] = [
   [84, 48],
   [52, 58],
 ];
+
+// How far right of the bell's centre each stripe sits at full size, in the order they appear.
+const STRIPES = [12, -12, 9];
 
 const COLOUR_NAMES = [
   "rim",
@@ -59,18 +64,20 @@ interface Pose {
   blink: boolean;
 }
 
-function buildPoses(): Pose[] {
-  const { x, y, vx } = flightPath(WAYPOINTS, FRAMES);
+function buildPoses({ mood, stage }: Traits): Pose[] {
+  const k = STAGE_SCALE[stage];
+  const { x, y, vx } = roam(WAYPOINTS, mood, FRAMES);
   const tilt = smooth(vx.map((v) => clamp(v * 0.35, -0.3, 0.3)), 15);
-  const blinks = new Set([40, 41, 42, 120, 121, 122]);
+  const blinks = blinkFrames(mood, [40, 120], FRAMES);
+  const pulses = cyclesFor(mood, PULSES);
   return Array.from({ length: FRAMES }, (_, i) => {
-    const phase = (TAU * PULSES * i) / FRAMES;
+    const phase = (TAU * pulses * i) / FRAMES;
     // A quick squeeze followed by a slower relax.
     const squeeze = 0.5 - 0.5 * Math.cos(phase + 0.6 * Math.sin(phase));
     return {
       x: x[i],
       // Each squeeze pushes it up, then it sinks a little while relaxing.
-      y: y[i] + 2.4 * Math.cos(phase - 0.9),
+      y: y[i] + 2.4 * k * Math.cos(phase - 0.9),
       squeeze,
       phase,
       drift: vx[i],
@@ -80,9 +87,9 @@ function buildPoses(): Pose[] {
   });
 }
 
-function bellOutline(pose: Pose): Point[] {
-  const rx = 18 - 3.5 * pose.squeeze;
-  const ry = 13 + 3 * pose.squeeze;
+function bellOutline(pose: Pose, k: number, lobes: number): Point[] {
+  const rx = (18 - 3.5 * pose.squeeze) * k;
+  const ry = (13 + 3 * pose.squeeze) * k;
   const cos = Math.cos(pose.tilt);
   const sin = Math.sin(pose.tilt);
   const turn = (x: number, y: number): Point => [
@@ -95,30 +102,30 @@ function bellOutline(pose: Pose): Point[] {
     points.push(turn(rx * Math.cos(a), ry * Math.sin(a)));
   }
   // The scalloped margin, right to left, rippling as it pulses.
-  const steps = LOBES * 4;
+  const steps = lobes * 4;
   for (let n = 1; n < steps; n++) {
     const f = n / steps;
     const x = rx - 2 * rx * f;
-    const scallop = Math.abs(Math.sin(Math.PI * LOBES * f));
-    const ripple = 0.8 * Math.sin(pose.phase * 2 + f * TAU);
-    points.push(turn(x, 1 + 2.6 * scallop + ripple));
+    const scallop = Math.abs(Math.sin(Math.PI * lobes * f));
+    const ripple = 0.8 * k * Math.sin(pose.phase * 2 + f * TAU);
+    points.push(turn(x, k + 2.6 * k * scallop + ripple));
   }
   return points;
 }
 
-function drawTentacles(canvas: Canvas, pose: Pose): void {
+function drawTentacles(canvas: Canvas, pose: Pose, k: number, count: number): void {
   const near = canvas.mask();
   const far = canvas.mask();
-  const rx = 15 - 3 * pose.squeeze;
-  for (let t = 0; t < TENTACLES; t++) {
-    const f = t / (TENTACLES - 1) - 0.5;
-    const length = 30 + 6 * Math.abs(Math.sin(t * 1.7)) - 5 * pose.squeeze;
+  const rx = (15 - 3 * pose.squeeze) * k;
+  for (let t = 0; t < count; t++) {
+    const f = t / (count - 1) - 0.5;
+    const length = (30 + 6 * Math.abs(Math.sin(t * 1.7)) - 5 * pose.squeeze) * k;
     const points: Point[] = [];
-    for (let k = 0; k <= 14; k++) {
-      const s = k / 14;
-      const wave = s * 3.4 * Math.sin(pose.phase - 3.4 * s + t * 1.3);
-      const trail = -pose.drift * 7 * s * s + pose.tilt * -8 * s;
-      points.push([ORIGIN + f * 2 * rx * (1 - 0.25 * s) + wave + trail, TOP + 2 + s * length]);
+    for (let n = 0; n <= 14; n++) {
+      const s = n / 14;
+      const wave = s * 3.4 * k * Math.sin(pose.phase - 3.4 * s + t * 1.3);
+      const trail = (-pose.drift * 7 * s * s + pose.tilt * -8 * s) * k;
+      points.push([ORIGIN + f * 2 * rx * (1 - 0.25 * s) + wave + trail, TOP + 2 * k + s * length]);
     }
     (t % 2 === 0 ? near : far).addLine(points);
   }
@@ -127,7 +134,7 @@ function drawTentacles(canvas: Canvas, pose: Pose): void {
 }
 
 /** Thicker, frilly arms hanging from the middle of the bell. */
-function drawArms(canvas: Canvas, pose: Pose): void {
+function drawArms(canvas: Canvas, pose: Pose, k: number): void {
   const arms = canvas.mask();
   const shade = canvas.mask();
   for (const [f, reach] of [
@@ -135,26 +142,26 @@ function drawArms(canvas: Canvas, pose: Pose): void {
     [0.4, 24],
     [0, 27],
   ]) {
-    const length = reach - 4 * pose.squeeze;
-    for (let k = 0; k <= 18; k++) {
-      const s = k / 18;
-      const wave = s * 2.2 * Math.sin(pose.phase - 2.6 * s + f * 6);
-      const trail = -pose.drift * 5 * s * s + pose.tilt * -6 * s;
-      const frill = 0.8 * Math.sin(k * 1.9 + pose.phase);
-      const x = ORIGIN + f * 12 * (1 - 0.3 * s) + wave + trail + frill;
-      const y = TOP + 1 + s * length;
-      arms.addDisc(x, y, 2.5 - 1.7 * s);
-      if (k % 3 === 0) shade.addDisc(x + 0.6, y, 0.9);
+    const length = (reach - 4 * pose.squeeze) * k;
+    for (let n = 0; n <= 18; n++) {
+      const s = n / 18;
+      const wave = s * 2.2 * k * Math.sin(pose.phase - 2.6 * s + f * 6);
+      const trail = (-pose.drift * 5 * s * s + pose.tilt * -6 * s) * k;
+      const frill = 0.8 * k * Math.sin(n * 1.9 + pose.phase);
+      const x = ORIGIN + f * 12 * k * (1 - 0.3 * s) + wave + trail + frill;
+      const y = TOP + k + s * length;
+      arms.addDisc(x, y, (2.5 - 1.7 * s) * k);
+      if (n % 3 === 0) shade.addDisc(x + 0.6, y, 0.9 * k);
     }
   }
   canvas.sticker(arms, C.arm, C.line);
   canvas.fill(shade.and(arms), C.armLo);
 }
 
-function drawBell(canvas: Canvas, pose: Pose): void {
-  const bell = canvas.mask().addPolygon(bellOutline(pose));
+function drawBell(canvas: Canvas, pose: Pose, traits: Traits, k: number): void {
+  const bell = canvas.mask().addPolygon(bellOutline(pose, k, traits.stage < 2 ? 6 : LOBES));
   canvas.sticker(bell, C.bell, C.line);
-  canvas.fill(bell.minus(bell.moved(0, -3)), C.bellLo);
+  canvas.fill(bell.minus(bell.moved(0, -Math.max(2, round(3 * k)))), C.bellLo);
   canvas.fill(bell.minus(bell.moved(-1, 2)), C.bellHi);
 
   const cos = Math.cos(pose.tilt);
@@ -167,20 +174,34 @@ function drawBell(canvas: Canvas, pose: Pose): void {
 
   // The glowing inner dome, with four little lobes.
   const inner = canvas.mask();
-  const [ix, iy] = place(0, -8 - 2 * pose.squeeze);
-  inner.addDisc(ix, iy, 7.2 * wide);
+  const [ix, iy] = place(0, (-8 - 2 * pose.squeeze) * k);
+  inner.addDisc(ix, iy, 7.2 * wide * k);
   canvas.fill(inner.and(bell), C.inner);
   const spots = canvas.mask();
   for (const dx of [-5.2, -1.8, 1.8, 5.2]) {
-    const [sx, sy] = place(dx * wide, -10 - 2 * pose.squeeze + Math.abs(dx) * 0.5);
-    spots.addDisc(sx, sy, 1.5);
+    const [sx, sy] = place(dx * wide * k, (-10 - 2 * pose.squeeze + Math.abs(dx) * 0.5) * k);
+    spots.addDisc(sx, sy, 1.5 * k);
   }
   canvas.fill(spots.and(bell), C.spot);
+
+  // Bold stripes on the flanks of the bell, two pixels wide whatever the size.
+  const stripes = canvas.mask();
+  for (const across of STRIPES.slice(0, traits.marks)) {
+    const [x0, y0] = place(across * wide * k, -9.5 * k);
+    const [x1, y1] = place(across * wide * k, -4 * k);
+    for (let thick = 0; thick < 2; thick++) {
+      stripes.addLine([
+        [x0 + thick, y0],
+        [x1 + thick, y1],
+      ]);
+    }
+  }
+  canvas.fill(stripes.and(bell), C.spot);
 
   // A small friendly face near the margin.
   const face = canvas.mask();
   const eye = (dx: number) => {
-    const [ex, ey] = place(dx * wide, -3.4);
+    const [ex, ey] = place(dx * wide * k, -3.4 * k);
     if (pose.blink) {
       face.addPixel(ex - 1, ey + 1).addPixel(ex, ey + 1);
     } else {
@@ -197,21 +218,22 @@ function drawBell(canvas: Canvas, pose: Pose): void {
   }
   const blush = canvas.mask();
   for (const dx of [-10, 10]) {
-    const [bx, by] = place(dx * wide, -1.4);
+    const [bx, by] = place(dx * wide * k, -1.4 * k);
     blush.addPixel(bx - 1, by).addPixel(bx, by).addPixel(bx + 1, by);
   }
   canvas.fill(blush.and(bell), C.blush);
   const smile = canvas.mask();
-  const [mx, my] = place(0, -1.6);
+  const [mx, my] = place(0, -1.6 * k);
   smile.addPixel(mx - 2, my).addPixel(mx - 1, my + 1).addPixel(mx, my + 1).addPixel(mx + 1, my + 1).addPixel(mx + 2, my);
   canvas.fill(smile, C.line);
 }
 
-function renderSprite(pose: Pose): Canvas {
+function renderSprite(pose: Pose, traits: Traits): Canvas {
+  const k = STAGE_SCALE[traits.stage];
   const canvas = new Canvas(LOCAL, LOCAL);
-  drawTentacles(canvas, pose);
-  drawArms(canvas, pose);
-  drawBell(canvas, pose);
+  drawTentacles(canvas, pose, k, traits.stage < 2 ? 5 : TENTACLES);
+  drawArms(canvas, pose, k);
+  drawBell(canvas, pose, traits, k);
   canvas.strengthenEdges([[C.line, C.rim]]);
   return canvas;
 }
@@ -220,29 +242,25 @@ function spriteOffset(pose: Pose): Point {
   return [round(pose.x) - ORIGIN, round(pose.y) - (TOP - 16)];
 }
 
-let prepared: { poses: Pose[]; motes: Spark[] } | undefined;
+const prepare = perTraits((traits): { poses: Pose[]; motes: Spark[] } => {
+  const k = STAGE_SCALE[traits.stage];
+  const poses = buildPoses(traits);
+  const motes = makeSparks(
+    MOTES,
+    FRAMES,
+    (birth) => {
+      const pose = poses[birth];
+      const [ox, oy] = spriteOffset(pose);
+      const side = birth % 2 === 0 ? -1 : 1;
+      return [ORIGIN + ox + side * (8 + (birth % 13)) * k, TOP + oy + 2];
+    },
+    { life: [18, 40], vx: [-0.14, 0.14], vy: [0.12, 0.34] },
+  );
+  return { poses, motes };
+});
 
-function prepare() {
-  if (!prepared) {
-    const poses = buildPoses();
-    const motes = makeSparks(
-      MOTES,
-      FRAMES,
-      (birth) => {
-        const pose = poses[birth];
-        const [ox, oy] = spriteOffset(pose);
-        const side = birth % 2 === 0 ? -1 : 1;
-        return [ORIGIN + ox + side * (8 + (birth % 13)), TOP + oy + 2];
-      },
-      { life: [18, 40], vx: [-0.14, 0.14], vy: [0.12, 0.34] },
-    );
-    prepared = { poses, motes };
-  }
-  return prepared;
-}
-
-function draw(index: number): Uint8Array {
-  const { poses, motes } = prepare();
+function draw(index: number, traits: Traits): Uint8Array {
+  const { poses, motes } = prepare(traits);
   const frame = new Canvas(WIDTH, HEIGHT);
   forEachSpark(motes, index, FRAMES, (x, y) => {
     if (x >= MARGIN && x < WIDTH - MARGIN && y >= MARGIN && y < HEIGHT - MARGIN) {
@@ -251,7 +269,7 @@ function draw(index: number): Uint8Array {
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset(pose);
-  renderSprite(pose).stampOnto(frame, ox, oy, MARGIN);
+  renderSprite(pose, traits).stampOnto(frame, ox, oy, MARGIN);
   return frame.pixels;
 }
 
@@ -266,6 +284,9 @@ export const jellyfish = defineCritter({
   delayMs: 60,
   poster: 24,
   colourNames: COLOUR_NAMES,
+  bodyColour: "bell",
+  accentColours: ["spot", "arm", "armLo", "tentacle", "tentacleLo", "mote"],
+  fixedColours: ["eye", "white", "blush"],
   colourways: [
     {
       id: "lagoon",

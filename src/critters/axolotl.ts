@@ -1,11 +1,13 @@
-import { drawLimb, drawTube, forEachSpark, makeSparks, tubeMask } from "../engine/body.ts";
+import { bandPositions, drawBands, drawLimb, drawTube, forEachSpark, makeSparks, tubeMask } from "../engine/body.ts";
 import type { Spark, Spine } from "../engine/body.ts";
 import { Canvas, flipArt, parseArt } from "../engine/canvas.ts";
 import type { Art } from "../engine/canvas.ts";
 import { colourIndexes, defineCritter } from "../engine/critter.ts";
 import type { Point } from "../engine/mask.ts";
-import { clamp, flightPath, openSpline, project, round, smooth, TAU, yawFromTravel } from "../engine/motion.ts";
+import { clamp, openSpline, project, round, smooth, TAU, yawFromTravel } from "../engine/motion.ts";
 import type { View } from "../engine/motion.ts";
+import { blinkFrames, cyclesFor, perTraits, roam, STAGE_SCALE } from "../engine/traits.ts";
+import type { Traits } from "../engine/traits.ts";
 
 const WIDTH = 180;
 const HEIGHT = 120;
@@ -140,10 +142,14 @@ const SPINE = [
 ];
 const SAMPLES = 70;
 const HIP = 3 / 7;
-const [SPINE_X, SPINE_Y, SPINE_R] = openSpline(SPINE, SAMPLES);
+// The spine at each stage, re-sampled from the scaled points.
+const SPINES = STAGE_SCALE.map((k) => openSpline(SPINE.map(([x, y, r]) => [x * k, y * k, r * k]), SAMPLES));
 const SPINE_U = Float64Array.from({ length: SAMPLES }, (_, i) => i / (SAMPLES - 1));
 const TAIL_WEIGHT = SPINE_U.map((u) => clamp((u - HIP * 0.5) / (1 - HIP * 0.5), 0, 1) ** 1.4);
 const SPECKLES = [0.2, 0.3, 0.42, 0.52, 0.62];
+// The first band sits this far along the spine, and the others follow about 4 pixels apart.
+const BANDS_FROM = 0.28;
+const BAND_GAP = 0.09;
 const LIMB_OFFSET = 5;
 
 // Gill stalks on each side of the head: [angle up from straight back, length].
@@ -162,28 +168,31 @@ interface Pose {
   view: View;
 }
 
-function buildPoses(): Pose[] {
-  const { x, y, vx, vy } = flightPath(WAYPOINTS, FRAMES);
+function buildPoses({ mood }: Traits): Pose[] {
+  const { x, y, vx, vy } = roam(WAYPOINTS, mood, FRAMES);
   const yaw = yawFromTravel(vx, REST_YAW, 0.6, 9);
   const pitch = smooth(vy.map((v) => clamp(-v * 0.3, -0.28, 0.28)), 11);
-  const blinks = new Set([20, 21, 22, 96, 97, 98, 150, 151, 152]);
+  const blinks = blinkFrames(mood, [20, 96, 150], FRAMES);
+  const swim = cyclesFor(mood, SWIM_CYCLES);
+  const gill = cyclesFor(mood, GILL_CYCLES);
   return Array.from({ length: FRAMES }, (_, i) => ({
     x: x[i],
     y: y[i],
-    swim: (TAU * SWIM_CYCLES * i) / FRAMES,
-    gill: (TAU * GILL_CYCLES * i) / FRAMES,
+    swim: (TAU * swim * i) / FRAMES,
+    gill: (TAU * gill * i) / FRAMES,
     blink: blinks.has(i),
     view: { yaw: yaw[i], pitch: pitch[i], elevation: 0.22, origin: ORIGIN },
   }));
 }
 
-function animatedSpine(pose: Pose): Spine {
+function animatedSpine(pose: Pose, k: number, stage: number): Spine {
+  const [SPINE_X, SPINE_Y, SPINE_R] = SPINES[stage];
   const y = new Float64Array(SAMPLES);
   const z = new Float64Array(SAMPLES);
   for (let i = 0; i < SAMPLES; i++) {
     const tail = TAIL_WEIGHT[i];
-    y[i] = SPINE_Y[i] + tail * 5 * Math.sin(pose.swim - 4.2 * SPINE_U[i]);
-    z[i] = tail * 2 * Math.sin(pose.swim + 1 - 4.2 * SPINE_U[i]);
+    y[i] = SPINE_Y[i] + tail * 5 * k * Math.sin(pose.swim - 4.2 * SPINE_U[i]);
+    z[i] = tail * 2 * k * Math.sin(pose.swim + 1 - 4.2 * SPINE_U[i]);
   }
   return { x: SPINE_X, y, z, radius: SPINE_R };
 }
@@ -191,7 +200,7 @@ function animatedSpine(pose: Pose): Spine {
 const TUBE = { fill: C.body, low: C.bodyLo, high: C.bodyHi, belly: C.belly, bellyLow: C.bellyLo };
 
 /** The body with a paddle-shaped fin along its back and tail, inside one outline. */
-function drawBody(canvas: Canvas, pose: Pose, spine: Spine): void {
+function drawBody(canvas: Canvas, pose: Pose, spine: Spine, k: number): void {
   const fin = canvas.mask();
   for (let i = 0; i < SAMPLES; i++) {
     const u = SPINE_U[i];
@@ -199,7 +208,7 @@ function drawBody(canvas: Canvas, pose: Pose, spine: Spine): void {
     const [sx, sy] = project(pose.view, spine.x[i], spine.y[i], spine.z[i]);
     // The fin widens along the tail, then comes to a soft point at the tip.
     const taper = 1 - 0.7 * clamp((u - 0.85) / 0.15, 0, 1) ** 2;
-    fin.addDisc(sx, sy, spine.radius[i] + (1 + 3.6 * clamp((u - 0.34) / 0.25, 0, 1)) * taper);
+    fin.addDisc(sx, sy, spine.radius[i] + (1 + 3.6 * clamp((u - 0.34) / 0.25, 0, 1)) * taper * k);
   }
   const body = tubeMask(canvas, pose.view, spine, () => true);
   canvas.fill(canvas.mask().add(fin).add(body).grown(), C.line);
@@ -208,24 +217,25 @@ function drawBody(canvas: Canvas, pose: Pose, spine: Spine): void {
 }
 
 /** Thin stalks with little side branches, so they read as ferns rather than blobs. */
-function drawGills(canvas: Canvas, pose: Pose, side: number, root: Point): void {
+function drawGills(canvas: Canvas, pose: Pose, side: number, root: Point, k: number): void {
   const stalks = canvas.mask();
   const branches = canvas.mask();
-  GILLS.forEach(([angle, length], g) => {
+  GILLS.forEach(([angle, fullLength], g) => {
+    const length = fullLength * k;
     const steps = 14;
     let previous: Point | undefined;
-    for (let k = 0; k <= steps; k++) {
-      const s = k / steps;
-      const wave = 1.6 * s * Math.sin(pose.gill + 2.2 * g - 2.5 * s + side);
+    for (let n = 0; n <= steps; n++) {
+      const s = n / steps;
+      const wave = 1.6 * k * s * Math.sin(pose.gill + 2.2 * g - 2.5 * s + side);
       const point = project(
         pose.view,
-        root[0] - 1 - s * length * Math.cos(angle) * 0.9,
-        root[1] + 5 + s * length * Math.sin(angle) + wave,
-        side * (5 + s * length * 0.6),
+        root[0] - k - s * length * Math.cos(angle) * 0.9,
+        root[1] + 5 * k + s * length * Math.sin(angle) + wave,
+        side * (5 * k + s * length * 0.6),
       );
       if (previous) stalks.addLine([previous, point]);
       previous = point;
-      if (k % 3 === 2) {
+      if (n % 3 === 2) {
         const [x, y] = [round(point[0]), round(point[1])];
         // Branch sideways from a stalk that runs up, otherwise up and down.
         if (Math.abs(Math.sin(angle)) > 0.7) branches.addPixel(x - 1, y).addPixel(x + 1, y);
@@ -258,9 +268,10 @@ function drawHead(canvas: Canvas, pose: Pose, joint: Point): void {
   canvas.stampArt(art, round(hx) - anchorX, round(hy) - anchorY, C.line);
 }
 
-function renderSprite(pose: Pose): Canvas {
+function renderSprite(pose: Pose, traits: Traits): Canvas {
+  const k = STAGE_SCALE[traits.stage];
   const canvas = new Canvas(LOCAL, LOCAL);
-  const spine = animatedSpine(pose);
+  const spine = animatedSpine(pose, k, traits.stage);
   const cosYaw = Math.cos(pose.view.yaw);
   const sinYaw = Math.sin(pose.view.yaw);
   const joint: Point = [spine.x[0], spine.y[0]];
@@ -279,12 +290,20 @@ function renderSprite(pose: Pose): Canvas {
   parts.push([
     0,
     () => {
-      drawBody(canvas, pose, spine);
+      drawBody(canvas, pose, spine, k);
       speckles();
+      drawBands(
+        canvas,
+        pose.view,
+        spine,
+        bandPositions(BANDS_FROM, BAND_GAP, k, traits.marks),
+        tubeMask(canvas, pose.view, spine, () => true),
+        C.gill,
+      );
     },
   ]);
   for (const side of [1, -1]) {
-    const z = side * LIMB_OFFSET;
+    const z = side * LIMB_OFFSET * k;
     const near = side * cosYaw > 0;
     const limb = { fill: near ? C.body : C.bodyLo, claw: C.toe, line: C.line };
     const beat = side * paddle * 2;
@@ -292,16 +311,16 @@ function renderSprite(pose: Pose): Canvas {
       [8, -4],
       [10 + beat * 0.5, -7],
       [12 + beat, -8.5],
-    ];
+    ].map(([x, y]) => [x * k, y * k]);
     const leg = [
       [-6, -3.5],
       [-8 - beat * 0.5, -6.5],
       [-10 - beat, -8.5],
-    ];
-    parts.push([8 * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, arm, z, 2, 1.1, limb)]);
-    parts.push([-6 * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, leg, z, 2.3, 1.2, limb)]);
+    ].map(([x, y]) => [x * k, y * k]);
+    parts.push([8 * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, arm, z, 2 * k, 1.1 * k, limb)]);
+    parts.push([-6 * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, leg, z, 2.3 * k, 1.2 * k, limb)]);
     // Facing the viewer both sets show beside the head; side-on the far set sits behind the body.
-    parts.push([side * cosYaw * 16 + sinYaw * 13, () => drawGills(canvas, pose, side, joint)]);
+    parts.push([side * cosYaw * 16 + sinYaw * 13, () => drawGills(canvas, pose, side, joint, k)]);
   }
   parts.push([12, () => drawHead(canvas, pose, joint)]);
 
@@ -312,34 +331,30 @@ function renderSprite(pose: Pose): Canvas {
   return canvas;
 }
 
-function spriteOffset(pose: Pose): Point {
-  const glide = 1.2 * Math.sin(pose.swim * 0.5);
+function spriteOffset(pose: Pose, k: number): Point {
+  const glide = 1.2 * k * Math.sin(pose.swim * 0.5);
   return [round(pose.x) - ORIGIN, round(pose.y + glide) - ORIGIN];
 }
 
-let prepared: { poses: Pose[]; bubbles: Spark[] } | undefined;
+const prepare = perTraits((traits): { poses: Pose[]; bubbles: Spark[] } => {
+  const k = STAGE_SCALE[traits.stage];
+  const poses = buildPoses(traits);
+  const bubbles = makeSparks(
+    BUBBLES,
+    FRAMES,
+    (birth) => {
+      const pose = poses[birth];
+      const [ox, oy] = spriteOffset(pose, k);
+      const [hx, hy] = project(pose.view, 30 * k, 2 * k, 0);
+      return [hx + ox, hy + oy];
+    },
+    { life: [22, 44], vx: [-0.12, 0.12], vy: [-0.55, -0.3] },
+  );
+  return { poses, bubbles };
+});
 
-function prepare() {
-  if (!prepared) {
-    const poses = buildPoses();
-    const bubbles = makeSparks(
-      BUBBLES,
-      FRAMES,
-      (birth) => {
-        const pose = poses[birth];
-        const [ox, oy] = spriteOffset(pose);
-        const [hx, hy] = project(pose.view, 30, 2, 0);
-        return [hx + ox, hy + oy];
-      },
-      { life: [22, 44], vx: [-0.12, 0.12], vy: [-0.55, -0.3] },
-    );
-    prepared = { poses, bubbles };
-  }
-  return prepared;
-}
-
-function draw(index: number): Uint8Array {
-  const { poses, bubbles } = prepare();
+function draw(index: number, traits: Traits): Uint8Array {
+  const { poses, bubbles } = prepare(traits);
   const frame = new Canvas(WIDTH, HEIGHT);
   forEachSpark(bubbles, index, FRAMES, (x, y, age) => {
     const inFrame = (px: number, py: number) =>
@@ -358,8 +373,8 @@ function draw(index: number): Uint8Array {
     }
   });
   const pose = poses[index];
-  const [ox, oy] = spriteOffset(pose);
-  renderSprite(pose).stampOnto(frame, ox, oy, MARGIN);
+  const [ox, oy] = spriteOffset(pose, STAGE_SCALE[traits.stage]);
+  renderSprite(pose, traits).stampOnto(frame, ox, oy, MARGIN);
   return frame.pixels;
 }
 
@@ -374,6 +389,9 @@ export const axolotl = defineCritter({
   delayMs: 60,
   poster: 30,
   colourNames: COLOUR_NAMES,
+  bodyColour: "body",
+  accentColours: ["gill", "gillHi", "bubble"],
+  fixedColours: ["eye", "white", "blush"],
   colourways: [
     {
       id: "blossom",

@@ -7,7 +7,6 @@ import type { Point } from "../engine/mask.ts";
 import {
   clamp,
   cumulativePhase,
-  flightPath,
   gradient,
   openSpline,
   project,
@@ -17,6 +16,8 @@ import {
   yawFromTravel,
 } from "../engine/motion.ts";
 import type { View } from "../engine/motion.ts";
+import { blinkFrames, cyclesFor, perTraits, roam, STAGE_SCALE } from "../engine/traits.ts";
+import type { Traits } from "../engine/traits.ts";
 
 const WIDTH = 180;
 const HEIGHT = 120;
@@ -170,7 +171,6 @@ const SAMPLES = 90;
 const CHEST = 2 / 9; // fractions of the way along SPINE
 const HIP = 4 / 9;
 const SPIKES_AT = [0.1, 0.18, 0.55, 0.66, 0.77];
-const [SPINE_X, SPINE_Y, SPINE_R] = openSpline(SPINE, SAMPLES);
 const SPINE_U = Float64Array.from({ length: SAMPLES }, (_, i) => i / (SAMPLES - 1));
 const TAIL_WEIGHT = SPINE_U.map((u) => clamp((u - HIP) / (1 - HIP), 0, 1) ** 1.5);
 const NECK_WEIGHT = SPINE_U.map((u) => clamp((CHEST - u) / CHEST, 0, 1));
@@ -198,6 +198,41 @@ const LEG = [
   [-15, -9.5],
 ];
 const LIMB_OFFSET = 4.5; // how far the limbs sit from the body's centre line
+// Studs on the wing membrane, as the panel each one sits in, in the order they appear.
+const STUD_PANELS = [1, 0, 2];
+
+/** The geometry at one stage, every length scaled from the full-size dragon. */
+interface Size {
+  scale: number;
+  spine: readonly [Float64Array, Float64Array, Float64Array];
+  wrist: Point;
+  tips: readonly Point[];
+  root: Point;
+  shoulder: readonly [number, number, number];
+  arm: number[][];
+  leg: number[][];
+  limbOffset: number;
+}
+
+const SIZES: readonly Size[] = STAGE_SCALE.map((k) => {
+  const along = ([a, b]: Point): Point => [a * k, b * k];
+  const scaled = (rows: readonly (readonly number[])[]) => rows.map(([a, b]) => [a * k, b * k]);
+  return {
+    scale: k,
+    spine: openSpline(SPINE.map(([x, y, r]) => [x * k, y * k, r * k]), SAMPLES) as [
+      Float64Array,
+      Float64Array,
+      Float64Array,
+    ],
+    wrist: along(WING_WRIST),
+    tips: WING_TIPS.map(along),
+    root: along(WING_ROOT),
+    shoulder: [SHOULDER[0] * k, SHOULDER[1] * k, SHOULDER[2] * k],
+    arm: scaled(ARM),
+    leg: scaled(LEG),
+    limbOffset: LIMB_OFFSET * k,
+  };
+});
 
 interface Pose {
   t: number;
@@ -212,40 +247,45 @@ interface Pose {
   view: View;
 }
 
-function buildPoses(): Pose[] {
-  const { x, y, vx, vy } = flightPath(WAYPOINTS, FRAMES);
+function buildPoses({ mood }: Traits): Pose[] {
+  const { x, y, vx, vy } = roam(WAYPOINTS, mood, FRAMES);
   const yaw = yawFromTravel(vx, REST_YAW, 0.7, 7);
   const pitch = smooth(vy.map((v) => clamp(-v * 0.24, -0.3, 0.3)), 9);
   const climb = smooth(vy.map((v) => clamp(-v / 1.2, -1, 1)), 9);
   // Beat faster on the way up, keeping a whole number of beats per loop.
-  const flap = cumulativePhase(climb.map((c) => 1 + 0.4 * c), FLAP_CYCLES);
-  const blinks = new Set([28, 29, 30, 36, 37, 38, 128, 129, 130]);
+  const flap = cumulativePhase(climb.map((c) => 1 + 0.4 * c), cyclesFor(mood, FLAP_CYCLES));
+  const sway = cyclesFor(mood, SWAY_CYCLES);
+  // A resting dragon holds its wings higher and beats them less.
+  const lift = mood === "resting" ? 0.55 : 0.75;
+  const blinks = blinkFrames(mood, [28, 36, 128], FRAMES);
   return Array.from({ length: FRAMES }, (_, i) => ({
     t: i / FRAMES,
     x: x[i],
     y: y[i],
     vx: vx[i],
     flap: flap[i],
-    lift: clamp(0.75 + 0.35 * climb[i], 0.45, 1),
-    sway: (TAU * SWAY_CYCLES * i) / FRAMES,
+    lift: clamp(lift + 0.35 * climb[i], 0.45, 1),
+    sway: (TAU * sway * i) / FRAMES,
     blink: blinks.has(i),
     view: { yaw: yaw[i], pitch: pitch[i], elevation: ELEVATION, origin: ORIGIN },
   }));
 }
 
 /** The spine this frame, in model space: the tail sways and the neck nods. */
-function animatedSpine(pose: Pose): Spine {
+function animatedSpine(pose: Pose, size: Size): Spine {
+  const [spineX, spineY, spineR] = size.spine;
+  const k = size.scale;
   const y = new Float64Array(SAMPLES);
   const z = new Float64Array(SAMPLES);
   for (let i = 0; i < SAMPLES; i++) {
     const tail = TAIL_WEIGHT[i];
     y[i] =
-      SPINE_Y[i] +
-      tail * 3.2 * Math.sin(pose.sway - 3 * tail) +
-      NECK_WEIGHT[i] * Math.sin(pose.flap + 1.2);
-    z[i] = tail * 2.5 * Math.sin(pose.sway + 1);
+      spineY[i] +
+      tail * 3.2 * k * Math.sin(pose.sway - 3 * tail) +
+      NECK_WEIGHT[i] * k * Math.sin(pose.flap + 1.2);
+    z[i] = tail * 2.5 * k * Math.sin(pose.sway + 1);
   }
-  return { x: SPINE_X, y, z, radius: SPINE_R };
+  return { x: spineX, y, z, radius: spineR };
 }
 
 function tailTip(pose: Pose, spine: Spine): Point {
@@ -259,7 +299,7 @@ function drawChain(canvas: Canvas, pose: Pose, spine: Spine, include: (u: number
   drawTube(canvas, pose.view, spine, TUBE, (i) => include(SPINE_U[i]), (i) => SPINE_U[i] < 0.82);
 }
 
-function drawSpikes(canvas: Canvas, pose: Pose, spine: Spine): void {
+function drawSpikes(canvas: Canvas, pose: Pose, spine: Spine, k: number): void {
   const { x, y, z } = spine;
   const dx = gradient(x);
   const dy = gradient(y);
@@ -271,9 +311,9 @@ function drawSpikes(canvas: Canvas, pose: Pose, spine: Spine): void {
     const alongY = dy[j] / length;
     const backX = alongY;
     const backY = -alongX;
-    const r = SPINE_R[j];
-    const height = 1.4 + r * 0.3;
-    const halfWidth = 1 + r * 0.14;
+    const r = spine.radius[j];
+    const height = 1.4 * k + r * 0.3;
+    const halfWidth = k + r * 0.14;
     const corner = (side: number) =>
       project(
         pose.view,
@@ -293,7 +333,8 @@ function drawSpikes(canvas: Canvas, pose: Pose, spine: Spine): void {
 }
 
 /** A bat-like wing: an arm, fingers fanning from the wrist, scalloped skin. */
-function drawWing(canvas: Canvas, pose: Pose, side: number): void {
+function drawWing(canvas: Canvas, pose: Pose, side: number, size: Size, marks: number): void {
+  const { wrist: WING_WRIST, tips: WING_TIPS, root: WING_ROOT, shoulder: SHOULDER, scale: k } = size;
   // Full strokes under power; held high and nearly still when gliding.
   let power = clamp((pose.lift - 0.45) / 0.25, 0, 1);
   power = power * power * (3 - 2 * power);
@@ -339,12 +380,12 @@ function drawWing(canvas: Canvas, pose: Pose, side: number): void {
       : canvas.mask().addPolygon([wrist, tip, scallops[i], point(WING_ROOT), shoulder]),
   );
   const arm = canvas.mask();
-  for (let k = 0; k < 8; k++) {
-    const f = k / 7;
+  for (let n = 0; n < 8; n++) {
+    const f = n / 7;
     arm.addDisc(
       shoulder[0] + (wrist[0] - shoulder[0]) * f,
       shoulder[1] + (wrist[1] - shoulder[1]) * f,
-      1.9 - 0.9 * f,
+      (1.9 - 0.9 * f) * k,
     );
   }
   const outlined = canvas.mask().add(arm);
@@ -353,7 +394,7 @@ function drawWing(canvas: Canvas, pose: Pose, side: number): void {
   for (const tip of tips) fingers.addLine([wrist, tip]);
 
   // Seen edge-on the fingers would collapse into stripes, so leave them out.
-  const edgeOn = Math.abs(tips[0][1] - wrist[1]) < 4;
+  const edgeOn = Math.abs(tips[0][1] - wrist[1]) < 4 * k;
   const bone = near ? C.body : C.bodyLo;
   const outline = outlined.grown();
   canvas.fill(outline, C.line);
@@ -363,6 +404,19 @@ function drawWing(canvas: Canvas, pose: Pose, side: number): void {
     canvas.fill(fingers, bone);
   }
   canvas.fill(arm, bone);
+
+  if (!edgeOn) {
+    const studs = canvas.mask();
+    for (const i of STUD_PANELS.slice(0, marks)) {
+      const [cx, cy] = [(tips[i][0] + tips[i + 1][0]) / 2, (tips[i][1] + tips[i + 1][1]) / 2];
+      const x = round(wrist[0] + (cx - wrist[0]) * 0.62);
+      const y = round(wrist[1] + (cy - wrist[1]) * 0.62);
+      studs.addPixel(x, y).addPixel(x + 1, y).addPixel(x, y + 1).addPixel(x + 1, y + 1);
+    }
+    const membrane = canvas.mask();
+    for (const panel of panels) membrane.add(panel);
+    canvas.fill(studs.and(membrane), near ? C.horn : C.hornLo);
+  }
 }
 
 /** Hand-drawn head art, held level like a real animal's as the body pitches. */
@@ -388,14 +442,14 @@ function drawHead(canvas: Canvas, pose: Pose, spine: Spine): void {
 }
 
 /** Nested tongues of fire that lean away from the direction of travel. */
-function drawFlame(canvas: Canvas, pose: Pose, spine: Spine): void {
+function drawFlame(canvas: Canvas, pose: Pose, spine: Spine, scale: number): void {
   const [ox, oy] = tailTip(pose, spine);
   const lean = -clamp(pose.vx * 0.22, -1.1, 1.1);
   // [sideways reach, length, whole flickers per loop, phase]
   const tongues = [
     [0, 1, 31, 0],
-    [-2.4, 0.62, 43, 1.7],
-    [2.2, 0.7, 37, 3.1],
+    [-2.4 * scale, 0.62, 43, 1.7],
+    [2.2 * scale, 0.7, 37, 3.1],
   ];
   const layers = [
     [C.fireOuter, 1],
@@ -407,14 +461,14 @@ function drawFlame(canvas: Canvas, pose: Pose, spine: Spine): void {
     const mask = canvas.mask();
     for (const [sideways, length, cycles, phase] of tongues) {
       const flicker = 0.85 + 0.15 * Math.sin(TAU * cycles * pose.t + phase);
-      const reach = 16 * length * flicker * size ** 0.6;
+      const reach = 16 * scale * length * flicker * size ** 0.6;
       for (let n = 0; n < 14; n++) {
         const k = n / 13;
-        const wiggle = k * 1.3 * Math.sin(TAU * (cycles + 11) * pose.t - 5 * k + phase);
+        const wiggle = k * 1.3 * scale * Math.sin(TAU * (cycles + 11) * pose.t - 5 * k + phase);
         mask.addDisc(
           ox + k * (lean * reach + sideways) + wiggle,
-          oy + (1 - size) * 2 - k * reach,
-          4.2 * size * (1 - k) ** 0.75 + 0.35,
+          oy + (1 - size) * 2 * scale - k * reach,
+          4.2 * scale * size * (1 - k) ** 0.75 + 0.35,
         );
       }
     }
@@ -422,14 +476,16 @@ function drawFlame(canvas: Canvas, pose: Pose, spine: Spine): void {
   }
 }
 
-function renderSprite(pose: Pose): Canvas {
+function renderSprite(pose: Pose, traits: Traits): Canvas {
+  const size = SIZES[traits.stage];
+  const k = size.scale;
   const canvas = new Canvas(LOCAL, LOCAL);
-  const spine = animatedSpine(pose);
+  const spine = animatedSpine(pose, size);
   const cosYaw = Math.cos(pose.view.yaw);
   const sinYaw = Math.sin(pose.view.yaw);
 
   // Painter's algorithm: each part is [depth, draw], drawn far to near.
-  const parts: [number, () => void][] = [[-0.5, () => drawSpikes(canvas, pose, spine)]];
+  const parts: [number, () => void][] = [[-0.5, () => drawSpikes(canvas, pose, spine, k)]];
   let tailDepth: number;
   if (Math.abs(cosYaw) > 0.5) {
     tailDepth = 0;
@@ -442,15 +498,16 @@ function renderSprite(pose: Pose): Canvas {
     parts.push([8, () => drawChain(canvas, pose, spine, (u) => u <= CHEST + 0.02)]);
   }
   for (const side of [1, -1]) {
-    parts.push([side * cosYaw * 15 - sinYaw * 5, () => drawWing(canvas, pose, side)]);
+    parts.push([side * cosYaw * 15 - sinYaw * 5, () => drawWing(canvas, pose, side, size, traits.marks)]);
     const near = side * cosYaw > 0;
     const limb = { fill: near ? C.body : C.bodyLo, claw: near ? C.horn : C.hornLo, line: C.line };
-    const z = side * LIMB_OFFSET;
-    parts.push([ARM[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, ARM, z, 2.3, 1.3, limb)]);
-    parts.push([LEG[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, LEG, z, 3.6, 1.6, limb)]);
+    const z = side * size.limbOffset;
+    const { arm, leg } = size;
+    parts.push([arm[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, arm, z, 2.3 * k, 1.3 * k, limb)]);
+    parts.push([leg[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, leg, z, 3.6 * k, 1.6 * k, limb)]);
   }
   parts.push([12, () => drawHead(canvas, pose, spine)]);
-  parts.push([tailDepth + 0.5, () => drawFlame(canvas, pose, spine)]);
+  parts.push([tailDepth + 0.5, () => drawFlame(canvas, pose, spine, k)]);
 
   parts.sort((a, b) => a[0] - b[0]);
   for (const [, draw] of parts) draw();
@@ -463,33 +520,29 @@ function renderSprite(pose: Pose): Canvas {
   return canvas;
 }
 
-function spriteOffset(pose: Pose): Point {
-  const bob = 1.5 * pose.lift * Math.sin(pose.flap);
+function spriteOffset(pose: Pose, k: number): Point {
+  const bob = 1.5 * k * pose.lift * Math.sin(pose.flap);
   return [round(pose.x) - ORIGIN, round(pose.y + bob) - ORIGIN];
 }
 
-let prepared: { poses: Pose[]; embers: Spark[] } | undefined;
+const prepare = perTraits((traits): { poses: Pose[]; embers: Spark[] } => {
+  const size = SIZES[traits.stage];
+  const poses = buildPoses(traits);
+  const embers = makeSparks(
+    EMBERS,
+    FRAMES,
+    (birth) => {
+      const [ox, oy] = spriteOffset(poses[birth], size.scale);
+      const [tipX, tipY] = tailTip(poses[birth], animatedSpine(poses[birth], size));
+      return [tipX + ox, tipY + oy - 6 * size.scale];
+    },
+    { life: [8, 17], vx: [-0.35, 0.35], vy: [-0.8, -0.35] },
+  );
+  return { poses, embers };
+});
 
-function prepare() {
-  if (!prepared) {
-    const poses = buildPoses();
-    const embers = makeSparks(
-      EMBERS,
-      FRAMES,
-      (birth) => {
-        const [ox, oy] = spriteOffset(poses[birth]);
-        const [tipX, tipY] = tailTip(poses[birth], animatedSpine(poses[birth]));
-        return [tipX + ox, tipY + oy - 6];
-      },
-      { life: [8, 17], vx: [-0.35, 0.35], vy: [-0.8, -0.35] },
-    );
-    prepared = { poses, embers };
-  }
-  return prepared;
-}
-
-function draw(index: number): Uint8Array {
-  const { poses, embers } = prepare();
+function draw(index: number, traits: Traits): Uint8Array {
+  const { poses, embers } = prepare(traits);
   const frame = new Canvas(WIDTH, HEIGHT);
   forEachSpark(embers, index, FRAMES, (x, y, age) => {
     if (x >= MARGIN && x < WIDTH - MARGIN && y >= MARGIN && y < HEIGHT - MARGIN) {
@@ -497,8 +550,8 @@ function draw(index: number): Uint8Array {
     }
   });
   const pose = poses[index];
-  const [ox, oy] = spriteOffset(pose);
-  renderSprite(pose).stampOnto(frame, ox, oy, MARGIN);
+  const [ox, oy] = spriteOffset(pose, SIZES[traits.stage].scale);
+  renderSprite(pose, traits).stampOnto(frame, ox, oy, MARGIN);
   return frame.pixels;
 }
 
@@ -513,6 +566,9 @@ export const dragon = defineCritter({
   delayMs: 60,
   poster: 46,
   colourNames: COLOUR_NAMES,
+  bodyColour: "body",
+  accentColours: ["wingHi", "wing", "wingLo", "wingFar", "wingFarLo", "fireOuter", "fireMid", "fireInner", "fireCore"],
+  fixedColours: ["horn", "hornLo", "eye", "white"],
   colourways: [
     {
       id: "ember",
