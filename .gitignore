@@ -1,4 +1,3 @@
-.venv/
-__pycache__/
-dragon.gif
-previews/
+node_modules/
+site/app.js
+*.gif

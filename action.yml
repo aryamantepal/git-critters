@@ -1,0 +1,20 @@
+name: git-critters
+description: Draw a pixel-art critter as a looping GIF and add it to your profile README.
+branding:
+  icon: feather
+  color: orange
+
+inputs:
+  critter:
+    description: Which critter to draw. One of dragon, axolotl, jellyfish or ghost.
+    required: true
+  colour:
+    description: Which colourway to use. Leave this out for the critter's first one.
+    default: ""
+  output:
+    description: Where to save the GIF, relative to the repository's root.
+    default: critter.gif
+
+runs:
+  using: node24
+  main: dist/action.cjs

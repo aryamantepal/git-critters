@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'"
+    />
+    <title>git-critters</title>
+    <meta name="description" content="Pick a pixel-art critter, see it on your GitHub profile, and add it in one click." />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <aside class="panel">
+      <header>
+        <h1>git-critters</h1>
+        <p class="lede">A pixel-art critter for your GitHub profile. Pick one, see how it looks, and add it.</p>
+      </header>
+
+      <fieldset>
+        <legend>Critter</legend>
+        <div id="critters" class="critters"></div>
+        <p id="blurb" class="blurb"></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Colour</legend>
+        <div id="colours" class="colours"></div>
+      </fieldset>
+
+      <div class="field">
+        <label for="username">Your GitHub username</label>
+        <input id="username" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="octocat" />
+      </div>
+
+      <a id="add" class="add waiting" target="_blank" rel="noopener">Add to my profile</a>
+      <p id="status" class="status" role="status"></p>
+
+      <div id="swap-help" class="swap" hidden>
+        <p>Change the last two lines of the file to:</p>
+        <pre id="swap-lines"></pre>
+        <button id="copy-swap" type="button" class="quiet">Copy</button>
+      </div>
+
+      <details>
+        <summary>What happens when I click it?</summary>
+        <ol>
+          <li>GitHub opens with one small workflow file already filled in.</li>
+          <li>You commit it. Choose “Create a new branch” if you'd rather review it as a pull request.</li>
+          <li>Within a minute, the workflow draws your critter and adds it to the top of your README.</li>
+        </ol>
+        <p>There's nothing to sign in to here, and nothing to install. To remove it, delete the workflow, <code>critter.gif</code> and the block it added to your README.</p>
+      </details>
+
+      <p class="more">
+        <button id="download" type="button" class="quiet">Download the GIF instead</button>
+      </p>
+
+      <footer>
+        <a href="https://github.com/aryamantepal/git-critters">Source</a>
+        <span>Inspired by <a href="https://github.com/yalongwastaken/git-koi">git-koi</a></span>
+      </footer>
+    </aside>
+
+    <main class="stage-area">
+      <div class="preview-bar">
+        <span class="preview-title">How it looks on your profile</span>
+        <div class="preview-controls">
+          <button id="pause" type="button" class="quiet"></button>
+          <fieldset class="theme" aria-label="GitHub theme">
+            <label><input id="theme-light" type="radio" name="theme" value="light" /><span>Light</span></label>
+            <label><input id="theme-dark" type="radio" name="theme" value="dark" /><span>Dark</span></label>
+          </fieldset>
+        </div>
+      </div>
+
+      <div id="preview" class="gh" data-theme="light">
+        <div class="gh-box">
+          <div class="gh-box-title"><span id="profile-name">your-name</span> / README<span class="gh-muted">.md</span></div>
+          <div class="gh-body">
+            <p class="gh-critter">
+              <canvas id="stage" role="img"></canvas><br />
+              <sub>Made with <a href="https://github.com/aryamantepal/git-critters">git-critters</a></sub>
+            </p>
+            <div id="readme-content"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <template id="sample-readme">
+      <h3>Hi, I'm your name</h3>
+      <p>This is where your README goes. Enter your username to see your own text here instead.</p>
+      <ul>
+        <li>Working on something good</li>
+        <li>Learning something new</li>
+        <li>Ask me about something you like</li>
+      </ul>
+    </template>
+  </body>
+</html>

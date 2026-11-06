@@ -1,0 +1,572 @@
+:root {
+  --accent: #f58a2c;
+  --on-accent: #1a1208;
+  --bg: #f6f6f3;
+  --panel: #ffffff;
+  --text: #1c1b18;
+  --muted: #68665f;
+  --line: #dddcd5;
+  --field: #ffffff;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15151a;
+    --panel: #1c1c22;
+    --text: #ecebe6;
+    --muted: #a09e96;
+    --line: #34343c;
+    --field: #15151a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 var(--sans);
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* The controls */
+
+.panel {
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.panel h1 {
+  font: 600 22px/1.2 var(--mono);
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+
+.lede {
+  margin: 0;
+  color: var(--muted);
+}
+
+fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+legend,
+.field label {
+  font: 600 12px/1 var(--mono);
+  color: var(--muted);
+  text-transform: lowercase;
+  padding: 0;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.critters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.critter {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.critter canvas {
+  width: 100%;
+  max-width: 120px;
+  height: auto;
+  aspect-ratio: 168 / 128;
+  image-rendering: pixelated;
+}
+
+.critter:hover {
+  border-color: var(--muted);
+}
+
+.critter:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.critter:has(input:focus-visible),
+.colour:has(input:focus-visible),
+.theme label:has(input:focus-visible) {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.critter input,
+.colour input,
+.theme input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.blurb {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  min-height: 3em;
+}
+
+.colours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.colour {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.colour:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
+}
+
+.field input {
+  width: 100%;
+  padding: 8px 10px;
+  font: 14px var(--mono);
+  color: var(--text);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+
+.add {
+  display: block;
+  text-align: center;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.add:hover {
+  filter: brightness(1.06);
+}
+
+.add:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.add.waiting {
+  background: transparent;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.status {
+  margin: -10px 0 0;
+  min-height: 3em;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.swap {
+  margin-top: -6px;
+  font-size: 13px;
+}
+
+.swap[hidden] {
+  display: none;
+}
+
+.swap p {
+  margin: 0 0 6px;
+}
+
+.swap pre {
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  font: 13px/1.5 var(--mono);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+button.quiet {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button.quiet:hover {
+  border-color: var(--muted);
+}
+
+details {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+summary {
+  cursor: pointer;
+  color: var(--text);
+}
+
+details ol {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+
+details li {
+  margin-bottom: 4px;
+}
+
+details p {
+  margin: 0;
+}
+
+details code {
+  font: 12px var(--mono);
+}
+
+.more {
+  margin: 0;
+}
+
+.panel footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.panel footer a {
+  color: inherit;
+}
+
+/* The preview */
+
+.stage-area {
+  padding: 20px 24px 40px;
+  min-width: 0;
+}
+
+.preview-bar {
+  max-width: 896px;
+  margin: 0 auto 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.preview-title {
+  font: 600 12px/1 var(--mono);
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.theme label {
+  position: relative;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.theme span {
+  display: block;
+  padding: 4px 10px;
+}
+
+.theme input:checked + span {
+  background: var(--text);
+  color: var(--panel);
+}
+
+/* A stand-in for GitHub's profile README, using GitHub's own colours. */
+
+.gh {
+  max-width: 896px;
+  margin: 0 auto;
+  padding: 16px;
+  border-radius: 10px;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  color: var(--gh-text);
+  background: var(--gh-canvas);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.gh[data-theme="light"] {
+  --gh-canvas: #ffffff;
+  --gh-text: #1f2328;
+  --gh-muted: #59636e;
+  --gh-border: #d1d9e0;
+  --gh-link: #0969da;
+  --gh-subtle: #f6f8fa;
+  color-scheme: light;
+}
+
+.gh[data-theme="dark"] {
+  --gh-canvas: #0d1117;
+  --gh-text: #f0f6fc;
+  --gh-muted: #9198a1;
+  --gh-border: #3d444d;
+  --gh-link: #4493f8;
+  --gh-subtle: #151b23;
+  color-scheme: dark;
+}
+
+.gh-box {
+  border: 1px solid var(--gh-border);
+  border-radius: 6px;
+  padding: 24px;
+}
+
+.gh-box-title {
+  font: 12px/1.5 var(--mono);
+  margin-bottom: 16px;
+}
+
+.gh-muted {
+  color: var(--gh-muted);
+}
+
+.gh a {
+  color: var(--gh-link);
+}
+
+.gh-critter {
+  text-align: center;
+  margin: 0 0 16px;
+}
+
+.gh-critter canvas {
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  vertical-align: bottom;
+}
+
+#readme-content > :first-child {
+  margin-top: 0;
+}
+
+#readme-content > :last-child {
+  margin-bottom: 0;
+}
+
+#readme-content p,
+#readme-content ul,
+#readme-content ol,
+#readme-content blockquote,
+#readme-content pre,
+#readme-content table {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+#readme-content h1,
+#readme-content h2,
+#readme-content h3,
+#readme-content h4 {
+  margin: 24px 0 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+#readme-content h1 {
+  font-size: 2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--gh-border);
+}
+
+#readme-content h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--gh-border);
+}
+
+#readme-content h3 {
+  font-size: 1.25em;
+}
+
+#readme-content ul,
+#readme-content ol {
+  padding-left: 2em;
+}
+
+#readme-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+#readme-content blockquote {
+  padding: 0 1em;
+  color: var(--gh-muted);
+  border-left: 0.25em solid var(--gh-border);
+}
+
+#readme-content code {
+  padding: 0.2em 0.4em;
+  font: 85% var(--mono);
+  background: var(--gh-subtle);
+  border-radius: 6px;
+}
+
+#readme-content pre {
+  padding: 16px;
+  overflow: auto;
+  background: var(--gh-subtle);
+  border-radius: 6px;
+}
+
+#readme-content pre code {
+  padding: 0;
+  background: transparent;
+}
+
+#readme-content hr {
+  border: 0;
+  height: 0.25em;
+  background: var(--gh-border);
+  margin: 24px 0;
+}
+
+#readme-content table {
+  border-collapse: collapse;
+  display: block;
+  overflow: auto;
+}
+
+#readme-content td,
+#readme-content th {
+  padding: 6px 13px;
+  border: 1px solid var(--gh-border);
+}
+
+/* Small screens: the preview goes first, since it's the point. */
+
+@media (max-width: 960px) {
+  body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+    background: var(--panel);
+  }
+
+  /* Unwrap the panel so the title can stay on top with the preview right under it. */
+  .panel {
+    display: contents;
+  }
+
+  .panel > * {
+    order: 2;
+  }
+
+  .panel > header {
+    order: 0;
+  }
+
+  .stage-area {
+    order: 1;
+    padding: 0;
+  }
+
+  .status {
+    margin-top: -8px;
+    min-height: 0;
+  }
+
+  .gh {
+    padding: 8px;
+  }
+
+  .gh-box {
+    padding: 16px;
+  }
+
+  .critters {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .critters {
+    grid-template-columns: 1fr 1fr;
+  }
+}

@@ -1,0 +1,85 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: The committed Action bundle is up to date
+        run: git diff --exit-code dist/
+
+  # Run the Action for real on a throwaway branch: it draws, edits the README and pushes.
+  action:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Start a throwaway branch with a README to add to
+        run: |
+          branch="action-test-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "BRANCH=$branch" >> "$GITHUB_ENV"
+          git switch -c "$branch"
+          printf '# Hello\n\nMy existing text.\n' > README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --quiet --all --message "A README to add to"
+          git push --quiet --set-upstream origin "$branch"
+
+      - uses: ./
+        with:
+          critter: ghost
+          colour: mint
+      - name: It committed a GIF and a README that keeps the existing text
+        run: |
+          git fetch --quiet origin "$BRANCH"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BRANCH")"
+          git log -1 --format=%s | grep -qx "critter: draw the mint ghost"
+          head -c 6 critter.gif | grep -q GIF89a
+          test "$(grep -c 'git-critters:start' README.md)" = 1
+          grep -q 'src="critter.gif"' README.md
+          grep -q 'My existing text.' README.md
+          git rev-parse HEAD > before
+
+      - uses: ./
+        with:
+          critter: ghost
+          colour: mint
+      - name: Running it again changes nothing
+        run: test "$(git rev-parse HEAD)" = "$(cat before)"
+
+      - uses: ./
+        with:
+          critter: dragon
+      - name: Swapping replaces the critter in place, using its first colourway
+        run: |
+          git log -1 --format=%s | grep -qx "critter: draw the ember dragon"
+          test "$(grep -c 'git-critters:start' README.md)" = 1
+          grep -q 'of a dragon' README.md
+
+      - name: An unknown critter fails with a clear message
+        id: unknown
+        continue-on-error: true
+        uses: ./
+        with:
+          critter: unicorn
+      - run: test "${{ steps.unknown.outcome }}" = failure
+
+      - name: Remove the throwaway branch
+        if: always()
+        run: git push --quiet origin --delete "$BRANCH" || true
