@@ -1,5 +1,7 @@
 import { paletteOf, SCALE } from "./critter.ts";
-import type { Critter } from "./critter.ts";
+import type { Colourway, Critter } from "./critter.ts";
+import { DEFAULT_TRAITS } from "./traits.ts";
+import type { Traits } from "./traits.ts";
 
 const TRANSPARENT = 0;
 
@@ -113,9 +115,13 @@ function writeLzw(out: ByteWriter, pixels: Uint8Array, minCodeSize: number): voi
 }
 
 /** Encode a critter as a looping GIF that clears every frame, so nothing trails behind. */
-export function encodeGif(critter: Critter, colourwayId: string): Uint8Array {
+export function encodeGif(
+  critter: Critter,
+  colourway: string | Colourway,
+  traits: Traits = DEFAULT_TRAITS,
+): Uint8Array {
   const { width, height, frames, delayMs } = critter;
-  const palette = paletteOf(critter, colourwayId);
+  const palette = paletteOf(critter, colourway);
   const colours = palette.length / 3;
   let tableBits = 2;
   while (1 << tableBits < colours) tableBits++;
@@ -137,7 +143,7 @@ export function encodeGif(critter: Critter, colourwayId: string): Uint8Array {
 
   const delay = Math.round(delayMs / 10);
   for (let index = 0; index < frames; index++) {
-    const pixels = critter.frame(index);
+    const pixels = critter.frame(index, traits);
 
     // Store only the part of the frame the critter occupies.
     let left = width;

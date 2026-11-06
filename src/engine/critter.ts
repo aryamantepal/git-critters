@@ -1,3 +1,6 @@
+import { DEFAULT_TRAITS, traitsKey } from "./traits.ts";
+import type { Traits } from "./traits.ts";
+
 /** How much a critter's logical pixels are scaled up in the GIF. */
 export const SCALE = 4;
 
@@ -26,24 +29,36 @@ export interface CritterDefinition<Name extends string = string> {
   colourways: readonly Colourway<Name>[];
   /**
    * Draw one frame as palette indexes, width × height. The result must depend only
-   * on the index, and every motion must complete whole cycles over `frames`, so the
-   * last frame flows into the first.
+   * on the index and traits, and every motion must complete whole cycles over
+   * `frames`, so the last frame flows into the first.
    */
-  draw(index: number): Uint8Array;
+  draw(index: number, traits: Traits): Uint8Array;
 }
 
-export interface Critter extends CritterDefinition {
-  /** The same as draw, but remembers each frame once it has been drawn. */
-  frame(index: number): Uint8Array;
+export interface Critter extends Omit<CritterDefinition, "draw"> {
+  /** Draw one frame. Traits default to `DEFAULT_TRAITS`. */
+  draw(index: number, traits?: Traits): Uint8Array;
+  /**
+   * The same as draw, but remembers each frame once it has been drawn. Only the
+   * most recent traits are kept.
+   */
+  frame(index: number, traits?: Traits): Uint8Array;
 }
 
 export function defineCritter<Name extends string>(definition: CritterDefinition<Name>): Critter {
-  const cache: (Uint8Array | undefined)[] = new Array(definition.frames);
+  let cacheKey = "";
+  let cache: (Uint8Array | undefined)[] = [];
   return {
     ...(definition as CritterDefinition),
-    frame(index) {
+    draw: (index, traits = DEFAULT_TRAITS) => definition.draw(index, traits),
+    frame(index, traits = DEFAULT_TRAITS) {
+      const key = traitsKey(traits);
+      if (key !== cacheKey) {
+        cache = new Array(definition.frames);
+        cacheKey = key;
+      }
       const i = ((index % definition.frames) + definition.frames) % definition.frames;
-      return (cache[i] ??= definition.draw(i));
+      return (cache[i] ??= definition.draw(i, traits));
     },
   };
 }
@@ -54,9 +69,9 @@ export function colourIndexes<Name extends string>(names: readonly Name[]): Read
 }
 
 /** The RGB triples for a colourway, with the transparent colour first. */
-export function paletteOf(critter: Critter, colourwayId: string): Uint8Array {
-  const way = critter.colourways.find((c) => c.id === colourwayId);
-  if (!way) throw new Error(`${critter.name} has no colourway "${colourwayId}"`);
+export function paletteOf(critter: Critter, colourway: string | Colourway): Uint8Array {
+  const way = typeof colourway === "string" ? critter.colourways.find((c) => c.id === colourway) : colourway;
+  if (!way) throw new Error(`${critter.name} has no colourway "${colourway}"`);
   const palette = new Uint8Array((critter.colourNames.length + 1) * 3);
   critter.colourNames.forEach((name, i) => {
     const hex = way.colours[name];
