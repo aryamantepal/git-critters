@@ -1,7 +1,7 @@
 // The whole "add to my profile" system: links to GitHub's own pages, already filled in.
 export const WORKFLOW_PATH = ".github/workflows/critter.yml";
 const ACTION = "aryamantepal/git-critters@v1";
-export const SITE_URL = "https://aryamantepal.github.io/git-critters";
+export const SITE_URL = "https://critters.aryamantepal.com";
 
 const USERNAME = /^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i;
 
