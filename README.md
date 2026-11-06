@@ -2,7 +2,7 @@
 
 Pixel-art critters for your GitHub profile README. Pick one, see how it looks on your own profile, and add it in one click.
 
-**[Pick a critter](https://aryamantepal.github.io/git-critters)**
+**[Pick a critter](https://critters.aryamantepal.com)**
 
 ## How it works
 
