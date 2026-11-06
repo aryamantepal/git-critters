@@ -1,0 +1,21 @@
+{
+  "name": "git-critters",
+  "private": true,
+  "type": "module",
+  "description": "Pixel-art critters for your GitHub profile README.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node scripts/build.ts --serve",
+    "build": "node scripts/build.ts",
+    "render": "node scripts/render.ts",
+    "typecheck": "tsc",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
