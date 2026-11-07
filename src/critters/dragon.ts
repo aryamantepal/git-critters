@@ -411,7 +411,7 @@ function drawWing(canvas: Canvas, pose: Pose, side: number, size: Size, marks: n
       const [cx, cy] = [(tips[i][0] + tips[i + 1][0]) / 2, (tips[i][1] + tips[i + 1][1]) / 2];
       const x = round(wrist[0] + (cx - wrist[0]) * 0.62);
       const y = round(wrist[1] + (cy - wrist[1]) * 0.62);
-      studs.addPixel(x, y).addPixel(x + 1, y).addPixel(x, y + 1).addPixel(x + 1, y + 1);
+      studs.addDisc(x, y, 1.1 + 0.8 * size.scale);
     }
     const membrane = canvas.mask();
     for (const panel of panels) membrane.add(panel);

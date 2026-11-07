@@ -208,7 +208,7 @@ function renderColourNote(): void {
   } else if (state.languages.length) {
     colourNote.textContent = `Coloured from your most-used languages: ${state.languages.join(" and ")}.`;
   } else if (state.profile) {
-    colourNote.textContent = `No languages to colour from in your public repos, so this shows ${state.critter.name}'s first colours.`;
+    colourNote.textContent = `No languages to colour from, so this shows ${state.critter.name}'s first colours.`;
   } else {
     colourNote.textContent = `Enter your username to colour it from your languages. Until then this shows ${state.critter.name}'s first colours.`;
   }

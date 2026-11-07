@@ -25,7 +25,7 @@ You pick the species. Your activity decides how it looks.
 | Longest streak in the past year | Marks | None under 7 days, one mark from 7, two from 30, three from 100 |
 | Contributions yesterday (UTC) | Motion | Resting at 0, steady from 1, lively from 5 |
 
-Marks follow the longest streak, not the current one, so missing a day never takes one away. Days are UTC.
+Marks follow the longest streak, not the current one, so missing a day doesn't take one away, though a streak stops counting once it's more than a year old. Days are UTC.
 
 The site can't read contributions without a token, so its preview uses your real languages and lets you try each size, mark and motion. The real critter comes from your activity when the workflow runs.
 
