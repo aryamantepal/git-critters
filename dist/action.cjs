@@ -151,6 +151,23 @@ function languageColourway(critter, languages) {
   return { id: LANGUAGES_COLOURWAY, name: "My languages", colours };
 }
 
+// src/activity/egg.ts
+var HATCH_AFTER = 25;
+function crackLevelFor(contributions) {
+  return Math.min(3, Math.floor(contributions * 4 / HATCH_AFTER));
+}
+function hasHatched(contributions) {
+  return contributions >= HATCH_AFTER;
+}
+var SURPRISE_POOL = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
+function surpriseFor(login) {
+  let hash = 2166136261;
+  for (const byte of new TextEncoder().encode(login.toLowerCase())) {
+    hash = Math.imul(hash ^ byte, 16777619) >>> 0;
+  }
+  return SURPRISE_POOL[hash % SURPRISE_POOL.length];
+}
+
 // src/activity/traits.ts
 var STAGE_FROM = [100, 1e3, 5e3];
 var MARKS_FROM = [7, 30, 100];
@@ -195,209 +212,6 @@ function traitsFor(activity, today) {
     marks: marksFor(activity.days, today),
     mood: moodFor(activity.days, today)
   };
-}
-
-// src/engine/motion.ts
-var TAU = 2 * Math.PI;
-function clamp(value, low, high) {
-  return Math.min(Math.max(value, low), high);
-}
-function round(value) {
-  const rounded = Math.round(value);
-  return Math.abs(value % 1) === 0.5 && rounded % 2 !== 0 ? rounded - 1 : rounded;
-}
-function scatter(n, seed) {
-  return n * seed % 1;
-}
-function catmullRom(p0, p1, p2, p3, f) {
-  return 0.5 * (2 * p1 + (p2 - p0) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f ** 2 + (3 * p1 - p0 - 3 * p2 + p3) * f ** 3);
-}
-function closedSpline(points, t) {
-  const n = points.length;
-  const u = t * n;
-  const i = Math.floor(u);
-  const f = u - i;
-  const at = (k) => points[(i + k + n) % n];
-  return [
-    catmullRom(at(-1)[0], at(0)[0], at(1)[0], at(2)[0], f),
-    catmullRom(at(-1)[1], at(0)[1], at(1)[1], at(2)[1], f)
-  ];
-}
-function openSpline(rows, samples) {
-  const n = rows.length;
-  const columns = rows[0].length;
-  const out = Array.from({ length: columns }, () => new Float64Array(samples));
-  for (let s = 0; s < samples; s++) {
-    const u = samples === 1 ? 0 : s * (n - 1) / (samples - 1);
-    const i = Math.min(Math.trunc(u), n - 2);
-    const f = u - i;
-    const at = (k) => rows[Math.min(Math.max(i + k, 0), n - 1)];
-    for (let c = 0; c < columns; c++) {
-      out[c][s] = catmullRom(at(-1)[c], at(0)[c], at(1)[c], at(2)[c], f);
-    }
-  }
-  return out;
-}
-function smooth(values, width) {
-  const kernel = Array.from({ length: width }, (_, i) => 0.5 - 0.5 * Math.cos(TAU * (i + 1) / (width + 1)));
-  const total = kernel.reduce((sum, v) => sum + v, 0);
-  const n = values.length;
-  const half = (width - 1) / 2;
-  const out = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    let sum = 0;
-    for (let k = 0; k < width; k++) sum += kernel[k] / total * values[(i + k - half + n) % n];
-    out[i] = sum;
-  }
-  return out;
-}
-function gradient(values) {
-  const n = values.length;
-  const out = new Float64Array(n);
-  for (let i = 1; i < n - 1; i++) out[i] = (values[i + 1] - values[i - 1]) / 2;
-  out[0] = values[1] - values[0];
-  out[n - 1] = values[n - 1] - values[n - 2];
-  return out;
-}
-function flightPath(waypoints, frames, laps = 1) {
-  const x = new Float64Array(frames);
-  const y = new Float64Array(frames);
-  for (let i = 0; i < frames; i++) {
-    [x[i], y[i]] = closedSpline(waypoints, laps * i / frames % 1);
-  }
-  const vx = new Float64Array(frames);
-  const vy = new Float64Array(frames);
-  for (let i = 0; i < frames; i++) {
-    const next = (i + 1) % frames;
-    const previous = (i - 1 + frames) % frames;
-    vx[i] = (x[next] - x[previous]) / 2;
-    vy[i] = (y[next] - y[previous]) / 2;
-  }
-  return { x, y, vx, vy };
-}
-function yawFromTravel(vx, rest, fullSpeed, width) {
-  const target = vx.map((v) => Math.PI / 2 - (Math.PI / 2 - rest) * clamp(v / fullSpeed, -1, 1));
-  return smooth(target, width);
-}
-function cumulativePhase(rate, cycles) {
-  const total = rate.reduce((sum2, v) => sum2 + v, 0);
-  const out = new Float64Array(rate.length);
-  let sum = 0;
-  for (let i = 0; i < rate.length; i++) {
-    sum += rate[i] * cycles / total;
-    out[i] = TAU * sum;
-  }
-  return out;
-}
-function project(view, x, y, z = 0) {
-  const cp = Math.cos(view.pitch);
-  const sp = Math.sin(view.pitch);
-  const px = x * cp - y * sp;
-  const py = x * sp + y * cp;
-  const cy = Math.cos(view.yaw);
-  const sy = Math.sin(view.yaw);
-  const depth = px * sy + z * cy;
-  return [px * cy - z * sy + view.origin, -py + view.elevation * depth + view.origin];
-}
-
-// src/engine/body.ts
-function tubeMask(canvas, view, spine, include) {
-  const body = canvas.mask();
-  for (let i = 0; i < spine.x.length; i++) {
-    if (!include(i)) continue;
-    const [sx, sy] = project(view, spine.x[i], spine.y[i], spine.z[i]);
-    body.addDisc(sx, sy, spine.radius[i]);
-  }
-  return body;
-}
-function drawTube(canvas, view, spine, colours, include, hasBelly) {
-  const { x, y, z, radius } = spine;
-  const dx = gradient(x);
-  const dy = gradient(y);
-  const body = tubeMask(canvas, view, spine, include);
-  const bellyArea = canvas.mask();
-  for (let i = 0; i < x.length; i++) {
-    if (!include(i) || !hasBelly(i)) continue;
-    const r = radius[i];
-    const length = Math.hypot(dx[i], dy[i]);
-    const [bx, by] = project(
-      view,
-      x[i] + -dy[i] / length * r * 0.72,
-      y[i] + dx[i] / length * r * 0.72,
-      z[i]
-    );
-    bellyArea.addDisc(bx, by, r * 0.6);
-  }
-  if (colours.line !== void 0) canvas.fill(body.grown(), colours.line);
-  canvas.fill(body, colours.fill);
-  canvas.fill(body.minus(body.moved(0, -2)), colours.low);
-  canvas.fill(body.minus(body.moved(0, 1)), colours.high);
-  const belly = body.and(bellyArea);
-  canvas.fill(belly, colours.belly);
-  canvas.fill(belly.minus(body.moved(0, -1)), colours.bellyLow);
-}
-function drawLimb(canvas, view, points, z, r0, r1, colours) {
-  const steps = 10;
-  const [xs, ys] = openSpline(points, steps);
-  const screen = Array.from(xs, (x, i) => project(view, x, ys[i], z));
-  const limb = canvas.mask();
-  screen.forEach(([sx, sy], i) => limb.addDisc(sx, sy, r0 + (r1 - r0) * i / (steps - 1)));
-  const [endX, endY] = screen[steps - 1];
-  const [backX, backY] = screen[steps - 3];
-  const length = Math.hypot(endX - backX, endY - backY) || 1;
-  const dx = (endX - backX) / length;
-  const dy = (endY - backY) / length;
-  const claws = canvas.mask();
-  for (const spread of [-1.2, 0, 1.2]) {
-    claws.addPixel(round(endX + dx * (r1 + 1.2) - dy * spread), round(endY + dy * (r1 + 1.2) + dx * spread));
-  }
-  canvas.fill(canvas.mask().add(limb).add(claws).grown(), colours.line);
-  canvas.fill(limb, colours.fill);
-  canvas.fill(claws, colours.claw);
-}
-function makeSparks(count, frames, spawnAt, { life, vx, vy }) {
-  return Array.from({ length: count }, (_, n) => {
-    const birth = (Math.floor(n * frames / count) + round(scatter(n, 0.618034) * 4)) % frames;
-    const [x, y] = spawnAt(birth);
-    return {
-      birth,
-      life: life[0] + round(scatter(n, 0.754878) * (life[1] - life[0])),
-      x,
-      y,
-      vx: vx[0] + scatter(n, 0.56984) * (vx[1] - vx[0]),
-      vy: vy[1] - scatter(n, 0.438744) * (vy[1] - vy[0])
-    };
-  });
-}
-function forEachSpark(sparks, index, frames, visit) {
-  for (const spark of sparks) {
-    const age = (index - spark.birth + frames) % frames;
-    if (age < spark.life) {
-      visit(round(spark.x + spark.vx * age), round(spark.y + spark.vy * age), age / spark.life);
-    }
-  }
-}
-function bandPositions(from, gap, scale, count) {
-  return Array.from({ length: count }, (_, n) => from + n * gap / scale);
-}
-function drawBands(canvas, view, spine, positions, body, colour) {
-  const dx = gradient(spine.x);
-  const dy = gradient(spine.y);
-  const bands = canvas.mask();
-  for (const u of positions) {
-    const i = Math.trunc(u * (spine.x.length - 1));
-    const length = Math.hypot(dx[i], dy[i]);
-    const [nx, ny] = [dy[i] / length, -dx[i] / length];
-    const edge = (side) => project(
-      view,
-      spine.x[i] + nx * spine.radius[i] * side,
-      spine.y[i] + ny * spine.radius[i] * side,
-      spine.z[i]
-    );
-    const [[x0, y0], [x1, y1]] = [edge(-0.1), edge(1.4)];
-    bands.addLine([[x0, y0], [x1, y1]]).addLine([[x0 + 1, y0], [x1 + 1, y1]]);
-  }
-  canvas.fill(bands.and(body), colour);
 }
 
 // src/engine/mask.ts
@@ -674,6 +488,109 @@ var Canvas = class {
   }
 };
 
+// src/engine/motion.ts
+var TAU = 2 * Math.PI;
+function clamp(value, low, high) {
+  return Math.min(Math.max(value, low), high);
+}
+function round(value) {
+  const rounded = Math.round(value);
+  return Math.abs(value % 1) === 0.5 && rounded % 2 !== 0 ? rounded - 1 : rounded;
+}
+function scatter(n, seed) {
+  return n * seed % 1;
+}
+function catmullRom(p0, p1, p2, p3, f) {
+  return 0.5 * (2 * p1 + (p2 - p0) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f ** 2 + (3 * p1 - p0 - 3 * p2 + p3) * f ** 3);
+}
+function closedSpline(points, t) {
+  const n = points.length;
+  const u = t * n;
+  const i = Math.floor(u);
+  const f = u - i;
+  const at = (k) => points[(i + k + n) % n];
+  return [
+    catmullRom(at(-1)[0], at(0)[0], at(1)[0], at(2)[0], f),
+    catmullRom(at(-1)[1], at(0)[1], at(1)[1], at(2)[1], f)
+  ];
+}
+function openSpline(rows, samples) {
+  const n = rows.length;
+  const columns = rows[0].length;
+  const out = Array.from({ length: columns }, () => new Float64Array(samples));
+  for (let s = 0; s < samples; s++) {
+    const u = samples === 1 ? 0 : s * (n - 1) / (samples - 1);
+    const i = Math.min(Math.trunc(u), n - 2);
+    const f = u - i;
+    const at = (k) => rows[Math.min(Math.max(i + k, 0), n - 1)];
+    for (let c = 0; c < columns; c++) {
+      out[c][s] = catmullRom(at(-1)[c], at(0)[c], at(1)[c], at(2)[c], f);
+    }
+  }
+  return out;
+}
+function smooth(values, width) {
+  const kernel = Array.from({ length: width }, (_, i) => 0.5 - 0.5 * Math.cos(TAU * (i + 1) / (width + 1)));
+  const total = kernel.reduce((sum, v) => sum + v, 0);
+  const n = values.length;
+  const half = (width - 1) / 2;
+  const out = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    for (let k = 0; k < width; k++) sum += kernel[k] / total * values[(i + k - half + n) % n];
+    out[i] = sum;
+  }
+  return out;
+}
+function gradient(values) {
+  const n = values.length;
+  const out = new Float64Array(n);
+  for (let i = 1; i < n - 1; i++) out[i] = (values[i + 1] - values[i - 1]) / 2;
+  out[0] = values[1] - values[0];
+  out[n - 1] = values[n - 1] - values[n - 2];
+  return out;
+}
+function flightPath(waypoints, frames, laps = 1) {
+  const x = new Float64Array(frames);
+  const y = new Float64Array(frames);
+  for (let i = 0; i < frames; i++) {
+    [x[i], y[i]] = closedSpline(waypoints, laps * i / frames % 1);
+  }
+  const vx = new Float64Array(frames);
+  const vy = new Float64Array(frames);
+  for (let i = 0; i < frames; i++) {
+    const next = (i + 1) % frames;
+    const previous = (i - 1 + frames) % frames;
+    vx[i] = (x[next] - x[previous]) / 2;
+    vy[i] = (y[next] - y[previous]) / 2;
+  }
+  return { x, y, vx, vy };
+}
+function yawFromTravel(vx, rest, fullSpeed, width) {
+  const target = vx.map((v) => Math.PI / 2 - (Math.PI / 2 - rest) * clamp(v / fullSpeed, -1, 1));
+  return smooth(target, width);
+}
+function cumulativePhase(rate, cycles) {
+  const total = rate.reduce((sum2, v) => sum2 + v, 0);
+  const out = new Float64Array(rate.length);
+  let sum = 0;
+  for (let i = 0; i < rate.length; i++) {
+    sum += rate[i] * cycles / total;
+    out[i] = TAU * sum;
+  }
+  return out;
+}
+function project(view, x, y, z = 0) {
+  const cp = Math.cos(view.pitch);
+  const sp = Math.sin(view.pitch);
+  const px = x * cp - y * sp;
+  const py = x * sp + y * cp;
+  const cy = Math.cos(view.yaw);
+  const sy = Math.sin(view.yaw);
+  const depth = px * sy + z * cy;
+  return [px * cy - z * sy + view.origin, -py + view.elevation * depth + view.origin];
+}
+
 // src/engine/traits.ts
 var DEFAULT_TRAITS = { stage: 3, marks: 0, mood: "steady" };
 var STAGE_SCALE = [0.55, 0.7, 0.85, 1];
@@ -746,11 +663,284 @@ function paletteOf(critter, colourway) {
   return palette;
 }
 
-// src/critters/axolotl.ts
+// src/critters/egg.ts
 var WIDTH = 180;
 var HEIGHT = 120;
-var FRAMES = 200;
+var FRAMES = 96;
 var MARGIN = 2;
+var LOCAL_WIDTH = 56;
+var LOCAL_HEIGHT = 64;
+var MIDDLE = 28;
+var TOP = 5;
+var SHELL_HEIGHT = 50;
+var SHELL_HALF_WIDTH = 21;
+var BOTTOM = TOP + SHELL_HEIGHT - 1;
+var FLOOR = 90;
+var ACTIVE = 0.62;
+var TWINKLE = [0, 1, 2, 3, 2, 1];
+var GLOW_BEAT = 24;
+var LEAN = { resting: 2.5, steady: 3.5, lively: 4.5 };
+var HOP = 4;
+var COLOUR_NAMES = ["rim", "shell", "shellHi", "shellLo", "speck", "crack", "glow", "gleam"];
+var C = colourIndexes(COLOUR_NAMES);
+var SPECKS = [
+  [4, 7, 2, 2],
+  [-4, 10, 2, 1],
+  [12, 13, 2, 2],
+  [-9, 17, 3, 2],
+  [7, 19, 2, 1],
+  [-16, 22, 2, 2],
+  [16, 24, 2, 2],
+  [0, 26, 3, 2],
+  [-11, 31, 2, 1],
+  [10, 32, 2, 2],
+  [-3, 36, 3, 2],
+  [-15, 38, 2, 1],
+  [14, 38, 2, 1],
+  [3, 42, 2, 1]
+];
+var CRACKS = [
+  { from: 1, glow: true, points: [[1, 3], [4, 7], [2, 10], [6, 14]] },
+  { from: 2, glow: true, points: [[6, 14], [5, 18], [9, 22]] },
+  { from: 2, glow: false, points: [[-15, 30], [-10, 28], [-9, 33], [-4, 31]] },
+  { from: 2, glow: false, points: [[12, 36], [9, 38], [10, 42]] },
+  { from: 3, glow: true, points: [[-19, 27], [-13, 22], [-8, 29], [-2, 21], [4, 30], [10, 22], [19, 28]] }
+];
+function poseAt(index, mood) {
+  const bursts = cyclesFor(mood, 2);
+  const length = FRAMES / bursts;
+  const at = index % length / length;
+  const swing = at < ACTIVE ? Math.sin(Math.PI * at / ACTIVE) ** 2 * Math.sin(TAU * 2 * at / ACTIVE) : 0;
+  const hopAt = (at - 0.7) / 0.24;
+  return {
+    lean: LEAN[mood] * swing,
+    hop: mood === "lively" && hopAt > 0 && hopAt < 1 ? HOP * Math.sin(Math.PI * hopAt) : 0,
+    twinkle: TWINKLE[index % TWINKLE.length],
+    glowing: Math.sin(TAU * index / GLOW_BEAT) > 0
+  };
+}
+function shellMask(canvas) {
+  const shell = canvas.mask();
+  for (let row = 0; row < SHELL_HEIGHT; row++) {
+    const s = (row + 0.5) / SHELL_HEIGHT * 2 - 1;
+    const half = SHELL_HALF_WIDTH * Math.sqrt(1 - s * s) * (1 + 0.14 * s);
+    for (let x = 0; x < LOCAL_WIDTH; x++) if (Math.abs(x + 0.5 - MIDDLE) <= half) shell.addPixel(x, TOP + row);
+  }
+  return shell;
+}
+function stroke(mask, points) {
+  for (let i = 1; i < points.length; i++) {
+    const [x0, y0] = points[i - 1];
+    const [x1, y1] = points[i];
+    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    for (let n = 0; n <= steps; n++) {
+      mask.addPixel(MIDDLE + round(x0 + (x1 - x0) * n / steps), TOP + round(y0 + (y1 - y0) * n / steps));
+    }
+  }
+  return mask;
+}
+function drawShell(level, pose) {
+  const canvas = new Canvas(LOCAL_WIDTH, LOCAL_HEIGHT);
+  const shell = shellMask(canvas);
+  canvas.fill(shell, C.shell);
+  canvas.fill(shell.minus(shell.moved(-3, -2)), C.shellLo);
+  canvas.fill(shell.minus(shell.moved(2, 2)), C.shellHi);
+  const gloss = canvas.mask();
+  for (let y = 0; y < LOCAL_HEIGHT; y++) {
+    for (let x = 0; x < LOCAL_WIDTH; x++) {
+      const across = (x + 0.5 - MIDDLE + 9.5) / 3.2;
+      const down = (y + 0.5 - TOP - 14) / 6.5;
+      if (across * across + down * down <= 1) gloss.addPixel(x, y);
+    }
+  }
+  gloss.addPixel(MIDDLE - 12, TOP + 23).addPixel(MIDDLE - 12, TOP + 24);
+  canvas.fill(gloss.and(shell), C.shellHi);
+  const specks = canvas.mask();
+  for (const [dx, dy, width, height] of SPECKS) {
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) specks.addPixel(MIDDLE + dx + x, TOP + dy + y);
+  }
+  canvas.fill(specks.and(shell), C.speck);
+  const thin = canvas.mask();
+  const lit = canvas.mask();
+  for (const crack of CRACKS) {
+    if (crack.from <= level) stroke(crack.glow && level === 3 ? lit : thin, crack.points);
+  }
+  if (pose.glowing) lit.add(lit.moved(0, 1));
+  canvas.fill(thin.add(lit.grown().minus(lit)).and(shell), C.crack);
+  canvas.fill(lit.and(shell), C.glow);
+  const gleam = canvas.mask();
+  if (pose.twinkle > 0) {
+    gleam.addPixel(MIDDLE - 10, TOP + 8);
+    for (let n = 1; n < pose.twinkle; n++) {
+      gleam.addPixel(MIDDLE - 10 + n, TOP + 8).addPixel(MIDDLE - 10 - n, TOP + 8);
+      gleam.addPixel(MIDDLE - 10, TOP + 8 + n).addPixel(MIDDLE - 10, TOP + 8 - n);
+    }
+  }
+  canvas.fill(gleam.and(shell), C.gleam);
+  return canvas;
+}
+function draw(index, traits) {
+  const pose = poseAt(index, traits.mood);
+  const upright = drawShell(traits.stage, pose);
+  const rocked = new Canvas(LOCAL_WIDTH, LOCAL_HEIGHT);
+  for (let y = TOP; y <= BOTTOM; y++) {
+    const shift = round(pose.lean * (BOTTOM - y) / SHELL_HEIGHT);
+    for (let x = 0; x < LOCAL_WIDTH; x++) {
+      const colour = upright.pixels[y * LOCAL_WIDTH + x];
+      if (colour) rocked.pixels[y * LOCAL_WIDTH + x + shift] = colour;
+    }
+  }
+  const sprite = new Canvas(LOCAL_WIDTH, LOCAL_HEIGHT);
+  const solid = sprite.mask();
+  rocked.pixels.forEach((colour, i) => solid.bits[i] = colour ? 1 : 0);
+  sprite.fill(solid.grown(), C.rim);
+  rocked.pixels.forEach((colour, i) => {
+    if (colour) sprite.pixels[i] = colour;
+  });
+  const frame = new Canvas(WIDTH, HEIGHT);
+  sprite.stampOnto(frame, WIDTH / 2 - MIDDLE, FLOOR - (BOTTOM + 1) - round(pose.hop), MARGIN);
+  return frame.pixels;
+}
+var FRESH_EGG = { stage: 0, marks: 0, mood: "steady" };
+var egg = defineCritter({
+  id: "egg",
+  name: "Egg",
+  blurb: "A speckled egg that rocks from side to side.",
+  alt: "Animated pixel art of a speckled egg rocking gently from side to side",
+  width: WIDTH,
+  height: HEIGHT,
+  frames: FRAMES,
+  delayMs: 60,
+  poster: 9,
+  colourNames: COLOUR_NAMES,
+  bodyColour: "shell",
+  accentColours: ["speck"],
+  fixedColours: ["glow", "gleam"],
+  edgeColours: ["rim"],
+  colourways: [
+    {
+      id: "cream",
+      name: "Cream",
+      colours: {
+        rim: "#a86f32",
+        shell: "#f5dba6",
+        shellHi: "#fff4d4",
+        shellLo: "#dcb374",
+        speck: "#c4553a",
+        crack: "#8c5a2e",
+        glow: "#ffd23f",
+        gleam: "#ffffff"
+      }
+    }
+  ],
+  draw
+});
+
+// src/engine/body.ts
+function tubeMask(canvas, view, spine, include) {
+  const body = canvas.mask();
+  for (let i = 0; i < spine.x.length; i++) {
+    if (!include(i)) continue;
+    const [sx, sy] = project(view, spine.x[i], spine.y[i], spine.z[i]);
+    body.addDisc(sx, sy, spine.radius[i]);
+  }
+  return body;
+}
+function drawTube(canvas, view, spine, colours, include, hasBelly) {
+  const { x, y, z, radius } = spine;
+  const dx = gradient(x);
+  const dy = gradient(y);
+  const body = tubeMask(canvas, view, spine, include);
+  const bellyArea = canvas.mask();
+  for (let i = 0; i < x.length; i++) {
+    if (!include(i) || !hasBelly(i)) continue;
+    const r = radius[i];
+    const length = Math.hypot(dx[i], dy[i]);
+    const [bx, by] = project(
+      view,
+      x[i] + -dy[i] / length * r * 0.72,
+      y[i] + dx[i] / length * r * 0.72,
+      z[i]
+    );
+    bellyArea.addDisc(bx, by, r * 0.6);
+  }
+  if (colours.line !== void 0) canvas.fill(body.grown(), colours.line);
+  canvas.fill(body, colours.fill);
+  canvas.fill(body.minus(body.moved(0, -2)), colours.low);
+  canvas.fill(body.minus(body.moved(0, 1)), colours.high);
+  const belly = body.and(bellyArea);
+  canvas.fill(belly, colours.belly);
+  canvas.fill(belly.minus(body.moved(0, -1)), colours.bellyLow);
+}
+function drawLimb(canvas, view, points, z, r0, r1, colours) {
+  const steps = 10;
+  const [xs, ys] = openSpline(points, steps);
+  const screen = Array.from(xs, (x, i) => project(view, x, ys[i], z));
+  const limb = canvas.mask();
+  screen.forEach(([sx, sy], i) => limb.addDisc(sx, sy, r0 + (r1 - r0) * i / (steps - 1)));
+  const [endX, endY] = screen[steps - 1];
+  const [backX, backY] = screen[steps - 3];
+  const length = Math.hypot(endX - backX, endY - backY) || 1;
+  const dx = (endX - backX) / length;
+  const dy = (endY - backY) / length;
+  const claws = canvas.mask();
+  for (const spread of [-1.2, 0, 1.2]) {
+    claws.addPixel(round(endX + dx * (r1 + 1.2) - dy * spread), round(endY + dy * (r1 + 1.2) + dx * spread));
+  }
+  canvas.fill(canvas.mask().add(limb).add(claws).grown(), colours.line);
+  canvas.fill(limb, colours.fill);
+  canvas.fill(claws, colours.claw);
+}
+function makeSparks(count, frames, spawnAt, { life, vx, vy }) {
+  return Array.from({ length: count }, (_, n) => {
+    const birth = (Math.floor(n * frames / count) + round(scatter(n, 0.618034) * 4)) % frames;
+    const [x, y] = spawnAt(birth);
+    return {
+      birth,
+      life: life[0] + round(scatter(n, 0.754878) * (life[1] - life[0])),
+      x,
+      y,
+      vx: vx[0] + scatter(n, 0.56984) * (vx[1] - vx[0]),
+      vy: vy[1] - scatter(n, 0.438744) * (vy[1] - vy[0])
+    };
+  });
+}
+function forEachSpark(sparks, index, frames, visit) {
+  for (const spark of sparks) {
+    const age = (index - spark.birth + frames) % frames;
+    if (age < spark.life) {
+      visit(round(spark.x + spark.vx * age), round(spark.y + spark.vy * age), age / spark.life);
+    }
+  }
+}
+function bandPositions(from, gap, scale, count) {
+  return Array.from({ length: count }, (_, n) => from + n * gap / scale);
+}
+function drawBands(canvas, view, spine, positions, body, colour) {
+  const dx = gradient(spine.x);
+  const dy = gradient(spine.y);
+  const bands = canvas.mask();
+  for (const u of positions) {
+    const i = Math.trunc(u * (spine.x.length - 1));
+    const length = Math.hypot(dx[i], dy[i]);
+    const [nx, ny] = [dy[i] / length, -dx[i] / length];
+    const edge = (side) => project(
+      view,
+      spine.x[i] + nx * spine.radius[i] * side,
+      spine.y[i] + ny * spine.radius[i] * side,
+      spine.z[i]
+    );
+    const [[x0, y0], [x1, y1]] = [edge(-0.1), edge(1.4)];
+    bands.addLine([[x0, y0], [x1, y1]]).addLine([[x0 + 1, y0], [x1 + 1, y1]]);
+  }
+  canvas.fill(bands.and(body), colour);
+}
+
+// src/critters/axolotl.ts
+var WIDTH2 = 180;
+var HEIGHT2 = 120;
+var FRAMES2 = 200;
+var MARGIN2 = 2;
 var SWIM_CYCLES = 14;
 var GILL_CYCLES = 9;
 var BUBBLES = 22;
@@ -768,7 +958,7 @@ var WAYPOINTS = [
   [58, 92],
   [38, 56]
 ];
-var COLOUR_NAMES = [
+var COLOUR_NAMES2 = [
   "rim",
   "line",
   "body",
@@ -785,17 +975,17 @@ var COLOUR_NAMES = [
   "toe",
   "bubble"
 ];
-var C = colourIndexes(COLOUR_NAMES);
+var C2 = colourIndexes(COLOUR_NAMES2);
 var ART_KEY = {
-  o: C.body,
-  h: C.bodyHi,
-  s: C.bodyLo,
-  c: C.belly,
-  d: C.bellyLo,
-  b: C.blush,
-  k: C.eye,
-  w: C.white,
-  n: C.line
+  o: C2.body,
+  h: C2.bodyHi,
+  s: C2.bodyLo,
+  c: C2.belly,
+  d: C2.bellyLo,
+  b: C2.blush,
+  k: C2.eye,
+  w: C2.white,
+  n: C2.line
 };
 var HEAD_SIDE = parseArt(
   `
@@ -843,13 +1033,13 @@ function withEyeShut(art) {
   for (let y = 5; y < 8; y++) {
     for (let x = 0; x < art.width; x++) {
       const at = y * art.width + x;
-      if (pixels[at] === C.white || pixels[at] === C.eye) {
-        pixels[at] = C.body;
+      if (pixels[at] === C2.white || pixels[at] === C2.eye) {
+        pixels[at] = C2.body;
         columns.add(x);
       }
     }
   }
-  for (const x of columns) pixels[6 * art.width + x] = C.line;
+  for (const x of columns) pixels[6 * art.width + x] = C2.line;
   return { ...art, pixels };
 }
 var HEADS = {
@@ -884,17 +1074,17 @@ var GILLS = [
   [0.4, 13]
 ];
 function buildPoses({ mood }) {
-  const { x, y, vx, vy } = roam(WAYPOINTS, mood, FRAMES);
+  const { x, y, vx, vy } = roam(WAYPOINTS, mood, FRAMES2);
   const yaw = yawFromTravel(vx, REST_YAW, 0.6, 9);
   const pitch = smooth(vy.map((v) => clamp(-v * 0.3, -0.28, 0.28)), 11);
-  const blinks = blinkFrames(mood, [20, 96, 150], FRAMES);
+  const blinks = blinkFrames(mood, [20, 96, 150], FRAMES2);
   const swim = cyclesFor(mood, SWIM_CYCLES);
   const gill = cyclesFor(mood, GILL_CYCLES);
-  return Array.from({ length: FRAMES }, (_, i) => ({
+  return Array.from({ length: FRAMES2 }, (_, i) => ({
     x: x[i],
     y: y[i],
-    swim: TAU * swim * i / FRAMES,
-    gill: TAU * gill * i / FRAMES,
+    swim: TAU * swim * i / FRAMES2,
+    gill: TAU * gill * i / FRAMES2,
     blink: blinks.has(i),
     view: { yaw: yaw[i], pitch: pitch[i], elevation: 0.22, origin: ORIGIN }
   }));
@@ -910,7 +1100,7 @@ function animatedSpine(pose, k, stage) {
   }
   return { x: SPINE_X, y, z, radius: SPINE_R };
 }
-var TUBE = { fill: C.body, low: C.bodyLo, high: C.bodyHi, belly: C.belly, bellyLow: C.bellyLo };
+var TUBE = { fill: C2.body, low: C2.bodyLo, high: C2.bodyHi, belly: C2.belly, bellyLow: C2.bellyLo };
 function drawBody(canvas, pose, spine, k) {
   const fin = canvas.mask();
   for (let i = 0; i < SAMPLES; i++) {
@@ -921,8 +1111,8 @@ function drawBody(canvas, pose, spine, k) {
     fin.addDisc(sx, sy, spine.radius[i] + (1 + 3.6 * clamp((u - 0.34) / 0.25, 0, 1)) * taper * k);
   }
   const body = tubeMask(canvas, pose.view, spine, () => true);
-  canvas.fill(canvas.mask().add(fin).add(body).grown(), C.line);
-  canvas.fill(fin, C.fin);
+  canvas.fill(canvas.mask().add(fin).add(body).grown(), C2.line);
+  canvas.fill(fin, C2.fin);
   drawTube(canvas, pose.view, spine, TUBE, () => true, (i) => SPINE_U[i] < 0.6);
 }
 function drawGills(canvas, pose, side, root, k) {
@@ -950,8 +1140,8 @@ function drawGills(canvas, pose, side, root, k) {
       }
     }
   });
-  canvas.fill(branches, C.gillHi);
-  canvas.fill(stalks, C.gill);
+  canvas.fill(branches, C2.gillHi);
+  canvas.fill(stalks, C2.gill);
 }
 function drawHead(canvas, pose, joint) {
   const cosYaw = Math.cos(pose.view.yaw);
@@ -971,7 +1161,7 @@ function drawHead(canvas, pose, joint) {
     [anchorX, anchorY] = HEAD_FRONT_ANCHOR;
   }
   const [hx, hy] = project(pose.view, joint[0], joint[1], 0);
-  canvas.stampArt(art, round(hx) - anchorX, round(hy) - anchorY, C.line);
+  canvas.stampArt(art, round(hx) - anchorX, round(hy) - anchorY, C2.line);
 }
 function renderSprite(pose, traits) {
   const k = STAGE_SCALE[traits.stage];
@@ -989,7 +1179,7 @@ function renderSprite(pose, traits) {
       const [sx, sy] = project(pose.view, spine.x[i], spine.y[i] + spine.radius[i] * 0.45, spine.z[i]);
       spots.addDisc(sx, sy, 0.8);
     }
-    canvas.fill(spots, C.bodyLo);
+    canvas.fill(spots, C2.bodyLo);
   };
   parts.push([
     0,
@@ -1002,14 +1192,14 @@ function renderSprite(pose, traits) {
         spine,
         bandPositions(BANDS_FROM, BAND_GAP, k, traits.marks),
         tubeMask(canvas, pose.view, spine, () => true),
-        C.gill
+        C2.gill
       );
     }
   ]);
   for (const side of [1, -1]) {
     const z = side * LIMB_OFFSET * k;
     const near = side * cosYaw > 0;
-    const limb = { fill: near ? C.body : C.bodyLo, claw: C.toe, line: C.line };
+    const limb = { fill: near ? C2.body : C2.bodyLo, claw: C2.toe, line: C2.line };
     const beat = side * paddle * 2;
     const arm = [
       [8, -4],
@@ -1027,8 +1217,8 @@ function renderSprite(pose, traits) {
   }
   parts.push([12, () => drawHead(canvas, pose, joint)]);
   parts.sort((a, b) => a[0] - b[0]);
-  for (const [, draw5] of parts) draw5();
-  canvas.strengthenEdges([[C.line, C.rim]]);
+  for (const [, draw6] of parts) draw6();
+  canvas.strengthenEdges([[C2.line, C2.rim]]);
   return canvas;
 }
 function spriteOffset(pose, k) {
@@ -1040,7 +1230,7 @@ var prepare = perTraits((traits) => {
   const poses = buildPoses(traits);
   const bubbles = makeSparks(
     BUBBLES,
-    FRAMES,
+    FRAMES2,
     (birth) => {
       const pose = poses[birth];
       const [ox, oy] = spriteOffset(pose, k);
@@ -1051,11 +1241,11 @@ var prepare = perTraits((traits) => {
   );
   return { poses, bubbles };
 });
-function draw(index, traits) {
+function draw2(index, traits) {
   const { poses, bubbles } = prepare(traits);
-  const frame = new Canvas(WIDTH, HEIGHT);
-  forEachSpark(bubbles, index, FRAMES, (x, y, age) => {
-    const inFrame = (px, py) => px >= MARGIN && px < WIDTH - MARGIN && py >= MARGIN && py < HEIGHT - MARGIN;
+  const frame = new Canvas(WIDTH2, HEIGHT2);
+  forEachSpark(bubbles, index, FRAMES2, (x, y, age) => {
+    const inFrame = (px, py) => px >= MARGIN2 && px < WIDTH2 - MARGIN2 && py >= MARGIN2 && py < HEIGHT2 - MARGIN2;
     const dots = age < 0.45 ? [[x, y]] : [
       [x - 1, y],
       [x + 1, y],
@@ -1063,12 +1253,12 @@ function draw(index, traits) {
       [x, y + 1]
     ];
     for (const [px, py] of dots) {
-      if (inFrame(px, py)) frame.pixels[py * WIDTH + px] = C.bubble;
+      if (inFrame(px, py)) frame.pixels[py * WIDTH2 + px] = C2.bubble;
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset(pose, STAGE_SCALE[traits.stage]);
-  renderSprite(pose, traits).stampOnto(frame, ox, oy, MARGIN);
+  renderSprite(pose, traits).stampOnto(frame, ox, oy, MARGIN2);
   return frame.pixels;
 }
 var axolotl = defineCritter({
@@ -1076,12 +1266,12 @@ var axolotl = defineCritter({
   name: "Axolotl",
   blurb: "Swims around smiling, with feathery gills and a trail of bubbles.",
   alt: "Animated pixel art of a smiling axolotl with feathery gills, swimming around the frame and blowing bubbles",
-  width: WIDTH,
-  height: HEIGHT,
-  frames: FRAMES,
+  width: WIDTH2,
+  height: HEIGHT2,
+  frames: FRAMES2,
   delayMs: 60,
   poster: 30,
-  colourNames: COLOUR_NAMES,
+  colourNames: COLOUR_NAMES2,
   bodyColour: "body",
   accentColours: ["gill", "gillHi", "bubble"],
   fixedColours: ["eye", "white", "blush"],
@@ -1151,14 +1341,14 @@ var axolotl = defineCritter({
       }
     }
   ],
-  draw
+  draw: draw2
 });
 
 // src/critters/dragon.ts
-var WIDTH2 = 180;
-var HEIGHT2 = 120;
-var FRAMES2 = 200;
-var MARGIN2 = 2;
+var WIDTH3 = 180;
+var HEIGHT3 = 120;
+var FRAMES3 = 200;
+var MARGIN3 = 2;
 var FLAP_CYCLES = 24;
 var SWAY_CYCLES = 12;
 var BURSTS = 3;
@@ -1179,7 +1369,7 @@ var WAYPOINTS2 = [
   [66, 47],
   [40, 62]
 ];
-var COLOUR_NAMES2 = [
+var COLOUR_NAMES3 = [
   "rim",
   // silhouette edge: must read on light and dark pages
   "line",
@@ -1201,20 +1391,20 @@ var COLOUR_NAMES2 = [
   "fireOuter",
   "fireMid"
 ];
-var C2 = colourIndexes(COLOUR_NAMES2);
+var C3 = colourIndexes(COLOUR_NAMES3);
 var ART_KEY2 = {
-  o: C2.body,
-  h: C2.bodyHi,
-  s: C2.bodyLo,
-  c: C2.belly,
-  d: C2.bellyLo,
-  f: C2.wing,
-  g: C2.wingLo,
-  i: C2.horn,
-  j: C2.hornLo,
-  k: C2.eye,
-  n: C2.line,
-  w: C2.white
+  o: C3.body,
+  h: C3.bodyHi,
+  s: C3.bodyLo,
+  c: C3.belly,
+  d: C3.bellyLo,
+  f: C3.wing,
+  g: C3.wingLo,
+  i: C3.horn,
+  j: C3.hornLo,
+  k: C3.eye,
+  n: C3.line,
+  w: C3.white
 };
 var HEAD_SIDE2 = parseArt(
   `
@@ -1256,13 +1446,13 @@ function withEyeShut2(art, [first, last]) {
   for (let y = first; y < last; y++) {
     for (let x = 0; x < art.width; x++) {
       const at = y * art.width + x;
-      if (pixels[at] === C2.white || pixels[at] === C2.eye) {
-        pixels[at] = C2.body;
+      if (pixels[at] === C3.white || pixels[at] === C3.eye) {
+        pixels[at] = C3.body;
         columns.add(x);
       }
     }
   }
-  for (const x of columns) pixels[(first + 1) * art.width + x] = C2.line;
+  for (const x of columns) pixels[(first + 1) * art.width + x] = C3.line;
   return { ...art, pixels };
 }
 function makeHead(side, eyeRows, front, anchors, noses) {
@@ -1367,22 +1557,22 @@ var SIZES = STAGE_SCALE.map((k) => {
   };
 });
 function buildPoses2({ mood }) {
-  const { x, y, vx, vy } = roam(WAYPOINTS2, mood, FRAMES2);
+  const { x, y, vx, vy } = roam(WAYPOINTS2, mood, FRAMES3);
   const yaw = yawFromTravel(vx, REST_YAW2, 0.7, 7);
   const pitch = smooth(vy.map((v) => clamp(-v * 0.24, -0.3, 0.3)), 9);
   const climb = smooth(vy.map((v) => clamp(-v / 1.2, -1, 1)), 9);
   const flap = cumulativePhase(climb.map((c) => 1 + 0.4 * c), cyclesFor(mood, FLAP_CYCLES));
   const sway = cyclesFor(mood, SWAY_CYCLES);
   const lift = mood === "resting" ? 0.55 : 0.75;
-  const blinks = blinkFrames(mood, [28, 36, 128], FRAMES2);
-  return Array.from({ length: FRAMES2 }, (_, i) => ({
-    t: i / FRAMES2,
+  const blinks = blinkFrames(mood, [28, 36, 128], FRAMES3);
+  return Array.from({ length: FRAMES3 }, (_, i) => ({
+    t: i / FRAMES3,
     x: x[i],
     y: y[i],
     vx: vx[i],
     flap: flap[i],
     lift: clamp(lift + 0.35 * climb[i], 0.45, 1),
-    sway: TAU * sway * i / FRAMES2,
+    sway: TAU * sway * i / FRAMES3,
     blink: blinks.has(i),
     view: { yaw: yaw[i], pitch: pitch[i], elevation: ELEVATION, origin: ORIGIN2 }
   }));
@@ -1399,14 +1589,14 @@ function animatedSpine2(pose, size) {
   }
   return { x: spineX, y, z, radius: spineR };
 }
-var TUBE2 = { fill: C2.body, low: C2.bodyLo, high: C2.bodyHi, belly: C2.belly, bellyLow: C2.bellyLo, line: C2.line };
+var TUBE2 = { fill: C3.body, low: C3.bodyLo, high: C3.bodyHi, belly: C3.belly, bellyLow: C3.bellyLo, line: C3.line };
 function drawBellyPlates(canvas, pose, spine, k, include) {
   const { x, y, z, radius } = spine;
   const dx = gradient(x);
   const dy = gradient(y);
   const belly = canvas.mask();
   canvas.pixels.forEach((colour, i) => {
-    belly.bits[i] = colour === C2.belly ? 1 : 0;
+    belly.bits[i] = colour === C3.belly ? 1 : 0;
   });
   const plates = canvas.mask();
   for (const u of bandPositions(0.1, 0.07, k, 6)) {
@@ -1422,7 +1612,7 @@ function drawBellyPlates(canvas, pose, spine, k, include) {
       project(pose.view, underX + across[0], underY + across[1], z[j])
     ]);
   }
-  canvas.fill(plates.and(belly), C2.bellyLo);
+  canvas.fill(plates.and(belly), C3.bellyLo);
 }
 function drawChain(canvas, pose, spine, k, include) {
   drawTube(canvas, pose.view, spine, TUBE2, (i) => include(SPINE_U2[i]), (i) => SPINE_U2[i] < 0.82);
@@ -1457,7 +1647,7 @@ function drawSpikes(canvas, pose, spine, k) {
     );
     mask.addPolygon([corner(-1), tip, corner(1)]);
   }
-  canvas.sticker(mask, C2.wing, C2.line);
+  canvas.sticker(mask, C3.wing, C3.line);
 }
 function drawWing(canvas, pose, side, size, marks) {
   const { wrist: WING_WRIST2, tips: WING_TIPS2, root: WING_ROOT2, shoulder: SHOULDER2, scale: k } = size;
@@ -1480,7 +1670,7 @@ function drawWing(canvas, pose, side, size, marks) {
     );
   };
   const near = side * Math.cos(pose.view.yaw) > 0;
-  const shades = near ? [C2.wingHi, C2.wing, C2.wingHi, C2.wing] : [C2.wingFar, C2.wingFarLo, C2.wingFar, C2.wingFarLo];
+  const shades = near ? [C3.wingHi, C3.wing, C3.wingHi, C3.wing] : [C3.wingFar, C3.wingFarLo, C3.wingFar, C3.wingFarLo];
   const shoulder = point([0, 0]);
   const wrist = point(WING_WRIST2);
   const tips = WING_TIPS2.map(point);
@@ -1509,12 +1699,12 @@ function drawWing(canvas, pose, side, size, marks) {
   const fingers = canvas.mask();
   for (const tip of tips) fingers.addLine([wrist, tip]);
   const edgeOn = Math.abs(tips[0][1] - wrist[1]) < 4 * k;
-  const bone = near ? C2.body : C2.bodyLo;
+  const bone = near ? C3.body : C3.bodyLo;
   const outline = outlined.grown();
-  canvas.fill(outline, C2.line);
+  canvas.fill(outline, C3.line);
   panels.forEach((panel, i) => canvas.fill(panel, edgeOn ? shades[1] : shades[i]));
   if (!edgeOn) {
-    canvas.fill(fingers.grown().minus(outline), C2.line);
+    canvas.fill(fingers.grown().minus(outline), C3.line);
     canvas.fill(fingers, bone);
   }
   canvas.fill(arm, bone);
@@ -1528,7 +1718,7 @@ function drawWing(canvas, pose, side, size, marks) {
     }
     const membrane = canvas.mask();
     for (const panel of panels) membrane.add(panel);
-    canvas.fill(studs.and(membrane), near ? C2.horn : C2.hornLo);
+    canvas.fill(studs.and(membrane), near ? C3.horn : C3.hornLo);
   }
 }
 function placeHead(pose, spine, head) {
@@ -1559,7 +1749,7 @@ function placeHead(pose, spine, head) {
 }
 function drawHead2(canvas, pose, spine, head) {
   const { art, left, top } = placeHead(pose, spine, head);
-  canvas.stampArt(art, left, top, C2.line);
+  canvas.stampArt(art, left, top, C3.line);
 }
 function drawTailFin(canvas, pose, spine, k) {
   const last = SAMPLES2 - 1;
@@ -1584,9 +1774,9 @@ function drawTailFin(canvas, pose, spine, k) {
   ];
   const outline = [point(0, 0), point(reach * 0.4, half), point(reach, 0), point(reach * 0.4, -half)];
   const fin = canvas.mask().addPolygon(outline);
-  canvas.sticker(fin, C2.wing, C2.line);
+  canvas.sticker(fin, C3.wing, C3.line);
   const vein = canvas.mask().addLine([point(reach * 0.15, 0), point(reach * 0.85, 0)]);
-  canvas.fill(vein.and(fin), C2.wingLo);
+  canvas.fill(vein.and(fin), C3.wingLo);
 }
 function renderSprite2(pose, traits) {
   const size = SIZES[traits.stage];
@@ -1609,7 +1799,7 @@ function renderSprite2(pose, traits) {
   for (const side of [1, -1]) {
     parts.push([side * cosYaw * 15 - sinYaw * 5, () => drawWing(canvas, pose, side, size, traits.marks)]);
     const near = side * cosYaw > 0;
-    const limb = { fill: near ? C2.body : C2.bodyLo, claw: near ? C2.horn : C2.hornLo, line: C2.line };
+    const limb = { fill: near ? C3.body : C3.bodyLo, claw: near ? C3.horn : C3.hornLo, line: C3.line };
     const z = side * size.limbOffset;
     const { arm, leg } = size;
     parts.push([arm[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, arm, z, 2.3 * k, 1.3 * k, limb)]);
@@ -1618,8 +1808,8 @@ function renderSprite2(pose, traits) {
   parts.push([12, () => drawHead2(canvas, pose, spine, HEADS2[traits.stage])]);
   parts.push([tailDepth + 0.5, () => drawTailFin(canvas, pose, spine, k)]);
   parts.sort((a, b) => a[0] - b[0]);
-  for (const [, draw5] of parts) draw5();
-  canvas.strengthenEdges([[C2.line, C2.rim]]);
+  for (const [, draw6] of parts) draw6();
+  canvas.strengthenEdges([[C3.line, C3.rim]]);
   return canvas;
 }
 function spriteOffset2(pose, k) {
@@ -1631,7 +1821,7 @@ function snoutSparks(poses, traits) {
   const head = HEADS2[traits.stage];
   return Array.from({ length: BURSTS * SPARKS_PER_BURST }, (_, n) => {
     const burst = Math.floor(n / SPARKS_PER_BURST);
-    const birth = (20 + Math.floor(burst * FRAMES2 / BURSTS) + n % SPARKS_PER_BURST * 3) % FRAMES2;
+    const birth = (20 + Math.floor(burst * FRAMES3 / BURSTS) + n % SPARKS_PER_BURST * 3) % FRAMES3;
     const pose = poses[birth];
     const { nose, facing } = placeHead(pose, animatedSpine2(pose, size), head);
     const [ox, oy] = spriteOffset2(pose, size.scale);
@@ -1649,17 +1839,17 @@ var prepare2 = perTraits((traits) => {
   const poses = buildPoses2(traits);
   return { poses, embers: snoutSparks(poses, traits) };
 });
-function draw2(index, traits) {
+function draw3(index, traits) {
   const { poses, embers } = prepare2(traits);
-  const frame = new Canvas(WIDTH2, HEIGHT2);
-  forEachSpark(embers, index, FRAMES2, (x, y, age) => {
-    if (x >= MARGIN2 && x < WIDTH2 - MARGIN2 && y >= MARGIN2 && y < HEIGHT2 - MARGIN2) {
-      frame.pixels[y * WIDTH2 + x] = age < 0.5 ? C2.fireMid : C2.fireOuter;
+  const frame = new Canvas(WIDTH3, HEIGHT3);
+  forEachSpark(embers, index, FRAMES3, (x, y, age) => {
+    if (x >= MARGIN3 && x < WIDTH3 - MARGIN3 && y >= MARGIN3 && y < HEIGHT3 - MARGIN3) {
+      frame.pixels[y * WIDTH3 + x] = age < 0.5 ? C3.fireMid : C3.fireOuter;
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset2(pose, SIZES[traits.stage].scale);
-  renderSprite2(pose, traits).stampOnto(frame, ox, oy, MARGIN2);
+  renderSprite2(pose, traits).stampOnto(frame, ox, oy, MARGIN3);
   return frame.pixels;
 }
 var dragon = defineCritter({
@@ -1667,12 +1857,12 @@ var dragon = defineCritter({
   name: "Dragon",
   blurb: "Flaps, soars and turns to look at you, puffing little sparks.",
   alt: "Animated pixel art of a dragon with a spade-tipped tail, flapping its wings as it wanders around the frame",
-  width: WIDTH2,
-  height: HEIGHT2,
-  frames: FRAMES2,
+  width: WIDTH3,
+  height: HEIGHT3,
+  frames: FRAMES3,
   delayMs: 60,
   poster: 46,
-  colourNames: COLOUR_NAMES2,
+  colourNames: COLOUR_NAMES3,
   bodyColour: "body",
   accentColours: ["wingHi", "wing", "wingLo", "wingFar", "wingFarLo", "fireOuter", "fireMid"],
   fixedColours: ["horn", "hornLo", "eye", "white"],
@@ -1751,14 +1941,14 @@ var dragon = defineCritter({
       }
     }
   ],
-  draw: draw2
+  draw: draw3
 });
 
 // src/critters/ghost.ts
-var WIDTH3 = 180;
-var HEIGHT3 = 120;
-var FRAMES3 = 200;
-var MARGIN3 = 2;
+var WIDTH4 = 180;
+var HEIGHT4 = 120;
+var FRAMES4 = 200;
+var MARGIN4 = 2;
 var BOBS = 6;
 var HEM_CYCLES = 16;
 var SPARKLES = 26;
@@ -1794,25 +1984,25 @@ var MARKS = [
   ]
 ];
 var EYE_GAP = [4, 5, 5, 6];
-var COLOUR_NAMES3 = ["rim", "line", "body", "bodyHi", "bodyLo", "eye", "white", "blush", "mouth", "sparkle"];
-var C3 = colourIndexes(COLOUR_NAMES3);
+var COLOUR_NAMES4 = ["rim", "line", "body", "bodyHi", "bodyLo", "eye", "white", "blush", "mouth", "sparkle"];
+var C4 = colourIndexes(COLOUR_NAMES4);
 function buildPoses3({ mood, stage }) {
   const k = STAGE_SCALE[stage];
-  const { x, y, vx } = roam(WAYPOINTS3, mood, FRAMES3);
+  const { x, y, vx } = roam(WAYPOINTS3, mood, FRAMES4);
   const look = smooth(vx.map((v) => clamp(v * 3.4, -4.5 * k, 4.5 * k)), 13);
   const lean = smooth(vx.map((v) => clamp(v * 1.8, -3 * k, 3 * k)), 21);
-  const blinks = blinkFrames(mood, [30, 60, 170], FRAMES3);
+  const blinks = blinkFrames(mood, [30, 60, 170], FRAMES4);
   const bobs = cyclesFor(mood, BOBS);
   const hem = cyclesFor(mood, HEM_CYCLES);
-  return Array.from({ length: FRAMES3 }, (_, i) => {
+  return Array.from({ length: FRAMES4 }, (_, i) => {
     const edge = Math.min(i - BOO_START, BOO_END - i);
     const boo = i >= BOO_START && i <= BOO_END ? clamp(edge / 4, 0, 1) : 0;
     return {
       x: x[i],
-      y: y[i] + 2.4 * k * Math.sin(TAU * bobs * i / FRAMES3),
+      y: y[i] + 2.4 * k * Math.sin(TAU * bobs * i / FRAMES4),
       look: look[i],
       lean: lean[i],
-      hem: TAU * hem * i / FRAMES3,
+      hem: TAU * hem * i / FRAMES4,
       boo,
       blink: blinks.has(i)
     };
@@ -1837,9 +2027,9 @@ function drawBody2(canvas, pose, k) {
       if (y <= hem) body.addPixel(ORIGIN3 + x, ORIGIN3 + y);
     }
   }
-  canvas.sticker(body, C3.body, C3.line);
-  canvas.fill(body.minus(body.moved(-2, -2)), C3.bodyLo);
-  canvas.fill(body.minus(body.moved(1, 2)), C3.bodyHi);
+  canvas.sticker(body, C4.body, C4.line);
+  canvas.fill(body.minus(body.moved(-2, -2)), C4.bodyLo);
+  canvas.fill(body.minus(body.moved(1, 2)), C4.bodyHi);
   return body;
 }
 function drawArms(canvas, pose, k) {
@@ -1851,8 +2041,8 @@ function drawArms(canvas, pose, k) {
     arms.addDisc(ORIGIN3 + side * reach, ORIGIN3 + 9 * k - lift + 5 * k + side * wave, 3.3 * k);
     arms.addDisc(ORIGIN3 + side * (reach - 2 * k), ORIGIN3 + 11 * k - lift + 5 * k + side * wave, 3 * k);
   }
-  canvas.sticker(arms, C3.body, C3.line);
-  canvas.fill(arms.minus(arms.moved(-1, -1)), C3.bodyLo);
+  canvas.sticker(arms, C4.body, C4.line);
+  canvas.fill(arms.minus(arms.moved(-1, -1)), C4.bodyLo);
 }
 function drawFace(canvas, pose, body, k, stage) {
   const cx = ORIGIN3 + round(pose.look);
@@ -1875,8 +2065,8 @@ function drawFace(canvas, pose, body, k, stage) {
     }
     glints.addPixel(left, cy);
   }
-  canvas.fill(eyes, C3.eye);
-  canvas.fill(glints, C3.white);
+  canvas.fill(eyes, C4.eye);
+  canvas.fill(glints, C4.white);
   const blush = canvas.mask();
   for (const side of [-1, 1]) {
     const bx = cx + side * (gap + (stage < 2 ? 3 : 4));
@@ -1885,14 +2075,14 @@ function drawFace(canvas, pose, body, k, stage) {
       blush.addPixel(bx + x, cy + 6);
     }
   }
-  canvas.fill(blush.and(body), C3.blush);
+  canvas.fill(blush.and(body), C4.blush);
   const mouth = canvas.mask();
   if (pose.boo > 0.5) {
     mouth.addDisc(cx, cy + 9, 3.4);
-    canvas.fill(mouth, C3.mouth);
+    canvas.fill(mouth, C4.mouth);
   } else {
     mouth.addPixel(cx - 2, cy + 6).addPixel(cx - 1, cy + 7).addPixel(cx, cy + 7).addPixel(cx + 1, cy + 7).addPixel(cx + 2, cy + 6);
-    canvas.fill(mouth, C3.line);
+    canvas.fill(mouth, C4.line);
   }
 }
 function drawMarks(canvas, pose, k, marks) {
@@ -1902,7 +2092,7 @@ function drawMarks(canvas, pose, k, marks) {
     const y = ORIGIN3 + round(dy * k) - round(3 * pose.boo * k);
     spots.addPixel(x, y).addPixel(x - 1, y).addPixel(x + 1, y).addPixel(x, y - 1).addPixel(x, y + 1);
   }
-  canvas.fill(spots, C3.sparkle);
+  canvas.fill(spots, C4.sparkle);
 }
 function renderSprite3(pose, traits) {
   const k = STAGE_SCALE[traits.stage];
@@ -1911,7 +2101,7 @@ function renderSprite3(pose, traits) {
   drawArms(canvas, pose, k);
   drawMarks(canvas, pose, k, traits.marks);
   drawFace(canvas, pose, body, k, traits.stage);
-  canvas.strengthenEdges([[C3.line, C3.rim]]);
+  canvas.strengthenEdges([[C4.line, C4.rim]]);
   return canvas;
 }
 function spriteOffset3(pose) {
@@ -1922,7 +2112,7 @@ var prepare3 = perTraits((traits) => {
   const poses = buildPoses3(traits);
   const sparkles = makeSparks(
     SPARKLES,
-    FRAMES3,
+    FRAMES4,
     (birth) => {
       const pose = poses[birth];
       const side = birth % 2 === 0 ? -1 : 1;
@@ -1932,10 +2122,10 @@ var prepare3 = perTraits((traits) => {
   );
   return { poses, sparkles };
 });
-function draw3(index, traits) {
+function draw4(index, traits) {
   const { poses, sparkles } = prepare3(traits);
-  const frame = new Canvas(WIDTH3, HEIGHT3);
-  forEachSpark(sparkles, index, FRAMES3, (x, y, age) => {
+  const frame = new Canvas(WIDTH4, HEIGHT4);
+  forEachSpark(sparkles, index, FRAMES4, (x, y, age) => {
     const dots = age < 0.5 ? [
       [x, y],
       [x - 1, y],
@@ -1944,14 +2134,14 @@ function draw3(index, traits) {
       [x, y + 1]
     ] : [[x, y]];
     for (const [px, py] of dots) {
-      if (px >= MARGIN3 && px < WIDTH3 - MARGIN3 && py >= MARGIN3 && py < HEIGHT3 - MARGIN3) {
-        frame.pixels[py * WIDTH3 + px] = C3.sparkle;
+      if (px >= MARGIN4 && px < WIDTH4 - MARGIN4 && py >= MARGIN4 && py < HEIGHT4 - MARGIN4) {
+        frame.pixels[py * WIDTH4 + px] = C4.sparkle;
       }
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset3(pose);
-  renderSprite3(pose, traits).stampOnto(frame, ox, oy, MARGIN3);
+  renderSprite3(pose, traits).stampOnto(frame, ox, oy, MARGIN4);
   return frame.pixels;
 }
 var ghost = defineCritter({
@@ -1959,12 +2149,12 @@ var ghost = defineCritter({
   name: "Ghost",
   blurb: "Floats about, leaves sparkles, and stops once a loop to say boo.",
   alt: "Animated pixel art of a friendly ghost floating around the frame, leaving sparkles and stopping to say boo",
-  width: WIDTH3,
-  height: HEIGHT3,
-  frames: FRAMES3,
+  width: WIDTH4,
+  height: HEIGHT4,
+  frames: FRAMES4,
   delayMs: 60,
   poster: 12,
-  colourNames: COLOUR_NAMES3,
+  colourNames: COLOUR_NAMES4,
   bodyColour: "body",
   accentColours: ["sparkle"],
   fixedColours: ["eye", "white", "blush"],
@@ -2019,19 +2209,19 @@ var ghost = defineCritter({
       }
     }
   ],
-  draw: draw3
+  draw: draw4
 });
 
 // src/critters/jellyfish.ts
-var WIDTH4 = 180;
-var HEIGHT4 = 120;
-var FRAMES4 = 200;
-var MARGIN4 = 2;
+var WIDTH5 = 180;
+var HEIGHT5 = 120;
+var FRAMES5 = 200;
+var MARGIN5 = 2;
 var PULSES = 8;
 var MOTES = 30;
 var LOCAL4 = 110;
 var ORIGIN4 = LOCAL4 / 2;
-var TOP = 34;
+var TOP2 = 34;
 var LOBES = 8;
 var TENTACLES = 7;
 var WAYPOINTS4 = [
@@ -2045,7 +2235,7 @@ var WAYPOINTS4 = [
   [52, 58]
 ];
 var STRIPES = [12, -12, 9];
-var COLOUR_NAMES4 = [
+var COLOUR_NAMES5 = [
   "rim",
   "line",
   "bell",
@@ -2062,15 +2252,15 @@ var COLOUR_NAMES4 = [
   "blush",
   "mote"
 ];
-var C4 = colourIndexes(COLOUR_NAMES4);
+var C5 = colourIndexes(COLOUR_NAMES5);
 function buildPoses4({ mood, stage }) {
   const k = STAGE_SCALE[stage];
-  const { x, y, vx } = roam(WAYPOINTS4, mood, FRAMES4);
+  const { x, y, vx } = roam(WAYPOINTS4, mood, FRAMES5);
   const tilt = smooth(vx.map((v) => clamp(v * 0.35, -0.3, 0.3)), 15);
-  const blinks = blinkFrames(mood, [40, 120], FRAMES4);
+  const blinks = blinkFrames(mood, [40, 120], FRAMES5);
   const pulses = cyclesFor(mood, PULSES);
-  return Array.from({ length: FRAMES4 }, (_, i) => {
-    const phase = TAU * pulses * i / FRAMES4;
+  return Array.from({ length: FRAMES5 }, (_, i) => {
+    const phase = TAU * pulses * i / FRAMES5;
     const squeeze = 0.5 - 0.5 * Math.cos(phase + 0.6 * Math.sin(phase));
     return {
       x: x[i],
@@ -2091,7 +2281,7 @@ function bellOutline(pose, k, lobes) {
   const sin = Math.sin(pose.tilt);
   const turn = (x, y) => [
     ORIGIN4 + x * cos - y * sin,
-    TOP + x * sin + y * cos
+    TOP2 + x * sin + y * cos
   ];
   const points = [];
   for (let n = 0; n <= 28; n++) {
@@ -2120,12 +2310,12 @@ function drawTentacles(canvas, pose, k, count) {
       const s = n / 14;
       const wave = s * 3.4 * k * Math.sin(pose.phase - 3.4 * s + t * 1.3);
       const trail = (-pose.drift * 7 * s * s + pose.tilt * -8 * s) * k;
-      points.push([ORIGIN4 + f * 2 * rx * (1 - 0.25 * s) + wave + trail, TOP + 2 * k + s * length]);
+      points.push([ORIGIN4 + f * 2 * rx * (1 - 0.25 * s) + wave + trail, TOP2 + 2 * k + s * length]);
     }
     (t % 2 === 0 ? near : far).addLine(points);
   }
-  canvas.fill(far, C4.tentacleLo);
-  canvas.fill(near, C4.tentacle);
+  canvas.fill(far, C5.tentacleLo);
+  canvas.fill(near, C5.tentacle);
 }
 function drawArms2(canvas, pose, k) {
   const arms = canvas.mask();
@@ -2142,36 +2332,36 @@ function drawArms2(canvas, pose, k) {
       const trail = (-pose.drift * 5 * s * s + pose.tilt * -6 * s) * k;
       const frill = 0.8 * k * Math.sin(n * 1.9 + pose.phase);
       const x = ORIGIN4 + f * 12 * k * (1 - 0.3 * s) + wave + trail + frill;
-      const y = TOP + k + s * length;
+      const y = TOP2 + k + s * length;
       arms.addDisc(x, y, (2.5 - 1.7 * s) * k);
       if (n % 3 === 0) shade.addDisc(x + 0.6, y, 0.9 * k);
     }
   }
-  canvas.sticker(arms, C4.arm, C4.line);
-  canvas.fill(shade.and(arms), C4.armLo);
+  canvas.sticker(arms, C5.arm, C5.line);
+  canvas.fill(shade.and(arms), C5.armLo);
 }
 function drawBell(canvas, pose, traits, k) {
   const bell = canvas.mask().addPolygon(bellOutline(pose, k, traits.stage < 2 ? 6 : LOBES));
-  canvas.sticker(bell, C4.bell, C4.line);
-  canvas.fill(bell.minus(bell.moved(0, -Math.max(2, round(3 * k)))), C4.bellLo);
-  canvas.fill(bell.minus(bell.moved(-1, 2)), C4.bellHi);
+  canvas.sticker(bell, C5.bell, C5.line);
+  canvas.fill(bell.minus(bell.moved(0, -Math.max(2, round(3 * k)))), C5.bellLo);
+  canvas.fill(bell.minus(bell.moved(-1, 2)), C5.bellHi);
   const cos = Math.cos(pose.tilt);
   const sin = Math.sin(pose.tilt);
   const place = (x, y) => [
     round(ORIGIN4 + x * cos - y * sin),
-    round(TOP + x * sin + y * cos)
+    round(TOP2 + x * sin + y * cos)
   ];
   const wide = 1 - 0.18 * pose.squeeze;
   const inner = canvas.mask();
   const [ix, iy] = place(0, (-8 - 2 * pose.squeeze) * k);
   inner.addDisc(ix, iy, 7.2 * wide * k);
-  canvas.fill(inner.and(bell), C4.inner);
+  canvas.fill(inner.and(bell), C5.inner);
   const spots = canvas.mask();
   for (const dx of [-5.2, -1.8, 1.8, 5.2]) {
     const [sx, sy] = place(dx * wide * k, (-10 - 2 * pose.squeeze + Math.abs(dx) * 0.5) * k);
     spots.addDisc(sx, sy, 1.5 * k);
   }
-  canvas.fill(spots.and(bell), C4.spot);
+  canvas.fill(spots.and(bell), C5.spot);
   const stripes = canvas.mask();
   for (const across of STRIPES.slice(0, traits.marks)) {
     const [x0, y0] = place(across * wide * k, -9.5 * k);
@@ -2183,7 +2373,7 @@ function drawBell(canvas, pose, traits, k) {
       ]);
     }
   }
-  canvas.fill(stripes.and(bell), C4.spot);
+  canvas.fill(stripes.and(bell), C5.spot);
   const face = canvas.mask();
   const eye = (dx) => {
     const [ex, ey] = place(dx * wide * k, -3.4 * k);
@@ -2196,21 +2386,21 @@ function drawBell(canvas, pose, traits, k) {
   };
   const [lx, ly] = eye(-6);
   const [rx, ry] = eye(6);
-  canvas.fill(face, C4.eye);
+  canvas.fill(face, C5.eye);
   if (!pose.blink) {
     const glint = canvas.mask().addPixel(lx - 1, ly).addPixel(rx - 1, ry);
-    canvas.fill(glint, C4.white);
+    canvas.fill(glint, C5.white);
   }
   const blush = canvas.mask();
   for (const dx of [-10, 10]) {
     const [bx, by] = place(dx * wide * k, -1.4 * k);
     blush.addPixel(bx - 1, by).addPixel(bx, by).addPixel(bx + 1, by);
   }
-  canvas.fill(blush.and(bell), C4.blush);
+  canvas.fill(blush.and(bell), C5.blush);
   const smile = canvas.mask();
   const [mx, my] = place(0, -1.6 * k);
   smile.addPixel(mx - 2, my).addPixel(mx - 1, my + 1).addPixel(mx, my + 1).addPixel(mx + 1, my + 1).addPixel(mx + 2, my);
-  canvas.fill(smile, C4.line);
+  canvas.fill(smile, C5.line);
 }
 function renderSprite4(pose, traits) {
   const k = STAGE_SCALE[traits.stage];
@@ -2218,39 +2408,39 @@ function renderSprite4(pose, traits) {
   drawTentacles(canvas, pose, k, traits.stage < 2 ? 5 : TENTACLES);
   drawArms2(canvas, pose, k);
   drawBell(canvas, pose, traits, k);
-  canvas.strengthenEdges([[C4.line, C4.rim]]);
+  canvas.strengthenEdges([[C5.line, C5.rim]]);
   return canvas;
 }
 function spriteOffset4(pose) {
-  return [round(pose.x) - ORIGIN4, round(pose.y) - (TOP - 16)];
+  return [round(pose.x) - ORIGIN4, round(pose.y) - (TOP2 - 16)];
 }
 var prepare4 = perTraits((traits) => {
   const k = STAGE_SCALE[traits.stage];
   const poses = buildPoses4(traits);
   const motes = makeSparks(
     MOTES,
-    FRAMES4,
+    FRAMES5,
     (birth) => {
       const pose = poses[birth];
       const [ox, oy] = spriteOffset4(pose);
       const side = birth % 2 === 0 ? -1 : 1;
-      return [ORIGIN4 + ox + side * (8 + birth % 13) * k, TOP + oy + 2];
+      return [ORIGIN4 + ox + side * (8 + birth % 13) * k, TOP2 + oy + 2];
     },
     { life: [18, 40], vx: [-0.14, 0.14], vy: [0.12, 0.34] }
   );
   return { poses, motes };
 });
-function draw4(index, traits) {
+function draw5(index, traits) {
   const { poses, motes } = prepare4(traits);
-  const frame = new Canvas(WIDTH4, HEIGHT4);
-  forEachSpark(motes, index, FRAMES4, (x, y) => {
-    if (x >= MARGIN4 && x < WIDTH4 - MARGIN4 && y >= MARGIN4 && y < HEIGHT4 - MARGIN4) {
-      frame.pixels[y * WIDTH4 + x] = C4.mote;
+  const frame = new Canvas(WIDTH5, HEIGHT5);
+  forEachSpark(motes, index, FRAMES5, (x, y) => {
+    if (x >= MARGIN5 && x < WIDTH5 - MARGIN5 && y >= MARGIN5 && y < HEIGHT5 - MARGIN5) {
+      frame.pixels[y * WIDTH5 + x] = C5.mote;
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset4(pose);
-  renderSprite4(pose, traits).stampOnto(frame, ox, oy, MARGIN4);
+  renderSprite4(pose, traits).stampOnto(frame, ox, oy, MARGIN5);
   return frame.pixels;
 }
 var jellyfish = defineCritter({
@@ -2258,12 +2448,12 @@ var jellyfish = defineCritter({
   name: "Jellyfish",
   blurb: "Pulses gently across the frame, shedding little specks of glow.",
   alt: "Animated pixel art of a smiling jellyfish pulsing as it drifts around the frame, trailing long tentacles",
-  width: WIDTH4,
-  height: HEIGHT4,
-  frames: FRAMES4,
+  width: WIDTH5,
+  height: HEIGHT5,
+  frames: FRAMES5,
   delayMs: 60,
   poster: 24,
-  colourNames: COLOUR_NAMES4,
+  colourNames: COLOUR_NAMES5,
   bodyColour: "bell",
   accentColours: ["spot", "arm", "armLo", "tentacle", "tentacleLo", "mote"],
   fixedColours: ["eye", "white", "blush"],
@@ -2333,7 +2523,7 @@ var jellyfish = defineCritter({
       }
     }
   ],
-  draw: draw4
+  draw: draw5
 });
 
 // src/critters/index.ts
@@ -2498,6 +2688,9 @@ function encodeGif(critter, colourway, traits = DEFAULT_TRAITS) {
   return out.result();
 }
 
+// src/site/links.ts
+var WORKFLOW_PATH = ".github/workflows/critter.yml";
+
 // src/action/activity.ts
 var API = "https://api.github.com";
 async function graphql(request, query) {
@@ -2522,28 +2715,41 @@ var CALENDAR_QUERY = `query($login: String!) {
     }
   }
 }`;
-function totalsQuery(years, now) {
-  const aliases = years.map((year) => {
-    const end = year === now.getUTCFullYear() ? now.toISOString() : `${year}-12-31T23:59:59Z`;
-    return `    y${year}: contributionsCollection(from: "${year}-01-01T00:00:00Z", to: "${end}") {
+function yearWindow(year, now, from = `${year}-01-01T00:00:00Z`) {
+  return { year, from, to: year === now.getUTCFullYear() ? now.toISOString() : `${year}-12-31T23:59:59Z` };
+}
+function totalsQuery(windows) {
+  const aliases = windows.map(
+    ({ year, from, to }) => `    y${year}: contributionsCollection(from: "${from}", to: "${to}") {
       contributionCalendar { totalContributions }
-    }`;
-  });
+    }`
+  );
   return `query($login: String!) {
   user(login: $login) {
 ${aliases.join("\n")}
   }
 }`;
 }
-async function lifetimeContributions(request, years) {
-  if (years.length === 0) return 0;
+async function sumContributions(request, windows) {
+  if (windows.length === 0) return 0;
   const result = await graphql(
     request,
-    totalsQuery(years, request.now)
+    totalsQuery(windows)
   );
   const user = userOrNull(result);
   if (!user) throw new Error("GitHub stopped finding the user between two requests");
   return Object.values(user).reduce((sum, year) => sum + year.contributionCalendar.totalContributions, 0);
+}
+function lifetimeContributions(request, years) {
+  return sumContributions(request, years.map((year) => yearWindow(year, request.now)));
+}
+function contributionsSince(request, since) {
+  const start = since < request.now ? since : request.now;
+  const windows = [yearWindow(start.getUTCFullYear(), request.now, start.toISOString())];
+  for (let year = start.getUTCFullYear() + 1; year <= request.now.getUTCFullYear(); year++) {
+    windows.push(yearWindow(year, request.now));
+  }
+  return sumContributions(request, windows);
 }
 async function languagesOf(request) {
   const response = await request.fetch(
@@ -2568,6 +2774,26 @@ async function readActivity(request) {
     },
     languages
   };
+}
+async function listCommits(request, url) {
+  const response = await request.fetch(url, {
+    headers: { Authorization: `Bearer ${request.token}`, Accept: "application/vnd.github+json" }
+  });
+  if (!response.ok) throw new Error(`GitHub's commit list answered ${response.status}`);
+  return { commits: await response.json(), link: response.headers.get("link") ?? "" };
+}
+async function workflowAdded(request, env) {
+  const repo = env.GITHUB_REPOSITORY;
+  if (!repo) throw new Error("GITHUB_REPOSITORY isn't set");
+  const ref = env.GITHUB_WORKFLOW_REF ?? "";
+  const path = ref.startsWith(`${repo}/`) && ref.includes("@") ? ref.slice(repo.length + 1, ref.indexOf("@")) : WORKFLOW_PATH;
+  const newest = await listCommits(request, `${API}/repos/${repo}/commits?path=${encodeURIComponent(path)}&per_page=1`);
+  const last = /<([^>]+)>;\s*rel="last"/.exec(newest.link)?.[1];
+  const oldest = last ? (await listCommits(request, last)).commits[0] : newest.commits[0];
+  return oldest ? new Date(oldest.commit.committer.date) : request.now;
+}
+async function readEggContributions(request, env) {
+  return contributionsSince(request, await workflowAdded(request, env));
 }
 
 // src/action/keepalive.ts
@@ -2608,12 +2834,18 @@ ${readme}`;
 }
 
 // src/action/main.ts
+var SURPRISE = "surprise";
 function input(name) {
   return (process.env[`INPUT_${name.toUpperCase()}`] ?? "").trim();
 }
 function fail(message) {
   console.log(`::error::${message}`);
   process.exit(1);
+}
+function flag(name) {
+  const value = (input(name) || "false").toLowerCase();
+  if (value !== "true" && value !== "false") fail(`${name} must be true or false, not "${input(name)}".`);
+  return value === "true";
 }
 function git(...args) {
   return (0, import_node_child_process.execFileSync)("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
@@ -2622,11 +2854,15 @@ function useBotIdentity() {
   git("config", "user.name", "github-actions[bot]");
   git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com");
 }
-async function lookUp(login, now) {
+async function lookUp(login, now, forEgg) {
   try {
-    const look = await readActivity({ login, token: input("token"), now, fetch });
-    if (!look) console.log(`::warning::GitHub has no user called ${login}, so there's no activity to draw from.`);
-    return look;
+    const request = { login, token: input("token"), now, fetch };
+    const look = await readActivity(request);
+    if (!look) {
+      console.log(`::warning::GitHub has no user called ${login}, so there's no activity to draw from.`);
+      return null;
+    }
+    return { look, sinceAdded: forEgg ? await readEggContributions(request, process.env) : 0 };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.log(`::warning::Couldn't read ${login}'s activity from GitHub: ${reason.replace(/\s+/g, " ")}`);
@@ -2634,59 +2870,101 @@ async function lookUp(login, now) {
   }
 }
 async function main() {
-  const critter = findCritter(input("critter"));
-  if (!critter) {
-    fail(`Unknown critter "${input("critter")}". Choose from: ${critters.map((c) => c.id).join(", ")}.`);
+  const surprise = input("critter") === SURPRISE;
+  const picked = surprise ? void 0 : findCritter(input("critter"));
+  if (!surprise && !picked) {
+    fail(`Unknown critter "${input("critter")}". Choose from: ${[...critters.map((c) => c.id), SURPRISE].join(", ")}.`);
   }
-  const activityInput = (input("activity") || "false").toLowerCase();
-  if (activityInput !== "true" && activityInput !== "false") {
-    fail(`activity must be true or false, not "${input("activity")}".`);
+  const activity = flag("activity");
+  const eggOn = flag("egg") || surprise;
+  if (eggOn && !activity) {
+    fail(
+      `${surprise ? `critter: ${SURPRISE}` : "egg: true"} needs activity: true, since the egg hatches from your contributions.`
+    );
   }
-  const activity = activityInput === "true";
   const colour = input("colour");
   if (colour === LANGUAGES_COLOURWAY && !activity) {
     fail(`colour: ${LANGUAGES_COLOURWAY} draws from your languages, so it needs activity: true.`);
   }
   const fixed = colour !== "" && colour !== LANGUAGES_COLOURWAY;
-  if (fixed && !critter.colourways.some((way) => way.id === colour)) {
+  if (fixed && surprise) {
     fail(
-      `${critter.name} doesn't come in "${colour}". Choose from: ${critter.colourways.map((way) => way.id).join(", ")}${activity ? `, or ${LANGUAGES_COLOURWAY}` : ""}.`
+      `critter: ${SURPRISE} can't use the fixed colour "${colour}", since each colour belongs to one critter. Use colour: ${LANGUAGES_COLOURWAY}, or leave colour out.`
+    );
+  }
+  if (fixed && picked && !picked.colourways.some((way) => way.id === colour)) {
+    fail(
+      `${picked.name} doesn't come in "${colour}". Choose from: ${picked.colourways.map((way) => way.id).join(", ")}${activity ? `, or ${LANGUAGES_COLOURWAY}` : ""}.`
     );
   }
   const gifPath = input("output") || "critter.gif";
   if (gifPath.startsWith("/") || gifPath.split("/").includes("..")) {
     fail(`output must be a path inside the repository, not "${gifPath}".`);
   }
+  const readmeName = (0, import_node_fs.readdirSync)(".").find((name) => /^readme(\.md)?$/i.test(name)) ?? "README.md";
+  const readme = (0, import_node_fs.existsSync)(readmeName) ? (0, import_node_fs.readFileSync)(readmeName, "utf8") : "";
   const now = /* @__PURE__ */ new Date();
-  let colourway = fixed ? colour : critter.colourways[0].id;
-  let traits = DEFAULT_TRAITS;
-  let message = `critter: draw the ${colourway} ${critter.id}`;
-  let added = `Added the ${colourway} ${critter.id}`;
-  if (activity) {
+  let plan;
+  if (!activity) {
+    const critter = picked;
+    const way = fixed ? colour : critter.colourways[0].id;
+    plan = {
+      critter,
+      colourway: way,
+      traits: DEFAULT_TRAITS,
+      message: `critter: draw the ${way} ${critter.id}`,
+      added: `Added the ${way} ${critter.id}`
+    };
+  } else {
     const login = input("login");
     if (!login) fail("login is empty, so there's no one to draw the critter for.");
-    const look = await lookUp(login, now);
-    if (!look && (0, import_node_fs.existsSync)(gifPath)) {
+    const reading = await lookUp(login, now, eggOn);
+    if (!reading && (0, import_node_fs.existsSync)(gifPath)) {
       console.log("Leaving the critter as it was, and trying again at the next run.");
       return;
     }
-    if (look) {
-      traits = traitsFor(look.activity, now);
-      if (!fixed) colourway = languageColourway(critter, look.languages);
-      console.log(
-        `Drawing from ${login}'s activity: stage ${traits.stage}, ${traits.marks} marks, ${traits.mood}${fixed ? "" : `, coloured by ${look.languages.join(" and ") || "the default colours"}`}.`
-      );
+    if (eggOn && (!reading || !hasHatched(reading.sinceAdded))) {
+      const message = `critter: draw the egg for ${yesterday(now)}`;
+      if (reading) {
+        console.log(`Drawing the egg: ${reading.sinceAdded} of ${HATCH_AFTER} contributions.`);
+        plan = {
+          critter: egg,
+          colourway: languageColourway(egg, reading.look.languages),
+          traits: { stage: crackLevelFor(reading.sinceAdded), marks: 0, mood: moodFor(reading.look.activity.days, now) },
+          message,
+          added: "Added the egg"
+        };
+      } else {
+        console.log("Drawing an uncracked egg for now.");
+        plan = { critter: egg, colourway: egg.colourways[0].id, traits: FRESH_EGG, message, added: "Added the egg" };
+      }
     } else {
-      console.log("Drawing the default critter for now.");
+      const critter = picked ?? findCritter(surpriseFor(login));
+      let colourway = fixed ? colour : critter.colourways[0].id;
+      let traits = DEFAULT_TRAITS;
+      if (reading) {
+        traits = traitsFor(reading.look.activity, now);
+        if (!fixed) colourway = languageColourway(critter, reading.look.languages);
+        console.log(
+          `Drawing from ${login}'s activity: stage ${traits.stage}, ${traits.marks} marks, ${traits.mood}${fixed ? "" : `, coloured by ${reading.look.languages.join(" and ") || "the default colours"}`}.`
+        );
+      } else {
+        console.log("Drawing the default critter for now.");
+      }
+      const hatching = eggOn && readme.includes(egg.alt);
+      const article = /^[aeiou]/i.test(critter.name) ? "an" : "a";
+      plan = {
+        critter,
+        colourway,
+        traits,
+        message: hatching ? `critter: the egg hatched into ${article} ${critter.name.toLowerCase()}` : `critter: draw the ${critter.id} for ${yesterday(now)}`,
+        added: `Added the ${critter.id}`
+      };
     }
-    message = `critter: draw the ${critter.id} for ${yesterday(now)}`;
-    added = `Added the ${critter.id}`;
   }
   (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(gifPath), { recursive: true });
-  (0, import_node_fs.writeFileSync)(gifPath, encodeGif(critter, colourway, traits));
-  const readmeName = (0, import_node_fs.readdirSync)(".").find((name) => /^readme(\.md)?$/i.test(name)) ?? "README.md";
-  const readme = (0, import_node_fs.existsSync)(readmeName) ? (0, import_node_fs.readFileSync)(readmeName, "utf8") : "";
-  (0, import_node_fs.writeFileSync)(readmeName, withCritterBlock(readme, critterBlock(critter, gifPath)));
+  (0, import_node_fs.writeFileSync)(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
+  (0, import_node_fs.writeFileSync)(readmeName, withCritterBlock(readme, critterBlock(plan.critter, gifPath)));
   git("add", "--force", "--", gifPath, readmeName);
   if (git("diff", "--cached", "--name-only").trim() === "") {
     console.log("The critter is already up to date, so there's nothing to commit.");
@@ -2699,8 +2977,8 @@ async function main() {
     return;
   }
   useBotIdentity();
-  git("commit", "--quiet", "--message", message);
+  git("commit", "--quiet", "--message", plan.message);
   git("push", "--quiet");
-  console.log(`${added} to ${readmeName}.`);
+  console.log(`${plan.added} to ${readmeName}.`);
 }
 main().catch((error) => fail(error instanceof Error ? error.message : String(error)));
