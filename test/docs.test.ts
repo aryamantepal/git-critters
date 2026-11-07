@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { HATCH_AFTER } from "../src/activity/egg.ts";
 import { LIVELY_FROM, MARKS_FROM, STAGE_FROM } from "../src/activity/traits.ts";
 import { critters } from "../src/critters/index.ts";
 import { workflowFile } from "../src/site/links.ts";
@@ -20,7 +21,15 @@ for (const critter of critters) {
 
 test("the README's example is the workflow the site generates", () => {
   const example = /```yaml\n([\s\S]*?)```/.exec(readme)?.[1];
-  assert.equal(example, workflowFile("dragon", "languages"));
+  assert.equal(example, workflowFile("dragon", "languages", true));
+});
+
+test("the README says when an egg hatches, with the number the code uses", () => {
+  const row = readme.split("\n").find((line) => line.startsWith("| Contributions since")) ?? "";
+  assert.ok(row.includes(`hatches after ${HATCH_AFTER}`), "the activity table has no row for the egg");
+  const numbers = [...readme.matchAll(/hatch(?:es)? after (\d+) contributions/g)].map((m) => Number(m[1]));
+  assert.ok(numbers.length > 0);
+  assert.ok(numbers.every((n) => n === HATCH_AFTER), numbers.join(", "));
 });
 
 test("the README's table of activity states the thresholds the code uses", () => {

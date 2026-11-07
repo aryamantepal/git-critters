@@ -169,6 +169,19 @@ legend,
   padding: 4px 10px;
 }
 
+.colour:has(input:disabled) {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.toggle:has(input:checked) span::before {
+  content: "✓ ";
+}
+
+.critter.surprise {
+  grid-column: 1 / -1;
+}
+
 .trait-row {
   margin-bottom: 8px;
 }
