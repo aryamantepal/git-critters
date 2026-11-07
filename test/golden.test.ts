@@ -1,6 +1,7 @@
 // Someone's committed GIF should only change when they ask for a different critter.
-// These are the SHA-256 hashes of each colourway's GIF from before traits existed,
-// so with the default traits the art has to stay byte for byte the same.
+// These are the SHA-256 hashes of each colourway's GIF with the default traits,
+// taken before traits existed (the dragon's after its redesign), so the art has to
+// stay byte for byte the same.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
@@ -9,9 +10,9 @@ import { encodeGif } from "../src/engine/gif.ts";
 import { DEFAULT_TRAITS } from "../src/engine/traits.ts";
 
 const HASHES: Record<string, string> = {
-  "dragon/ember": "433b58646e998a461c14c658bb8a29df37dc6a76989d96ec4401084f23af0552",
-  "dragon/frost": "9dd63ad6716b078f46b1c74e2d42ee31e2fd85851a259f679d6236b415c4bbda",
-  "dragon/moss": "762fc2f4f39522cc9e95557da36945222a2705fca5308bb66aa5fab3b71e3c1c",
+  "dragon/ember": "3374d22046e22b41b78b6511c32c23078e1f05553acdcbf9db5636086c6f0d6a",
+  "dragon/frost": "221d01a57ea1dcceb70ec3248679743bba7763594efa1b59989938245c8a9a8a",
+  "dragon/moss": "7cbdad55634c3da3a00abdfbbff5d916f2d8319dc0f5252933327e8162474f28",
   "axolotl/blossom": "c73f7475b44873b9440607cf10a53d7a92c71e2417cf8d589381aa5f40a683c0",
   "axolotl/gold": "47fab38de9438c9f3fa800338fdd650195558a419a9b99e17e412778a6a69369",
   "axolotl/dusk": "69c0ac2b616e530c0bb4705612eb1d3b96ab1646f5c81054c81309559e53e6c1",

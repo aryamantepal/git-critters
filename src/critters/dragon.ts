@@ -1,4 +1,4 @@
-import { drawLimb, drawTube, forEachSpark, makeSparks } from "../engine/body.ts";
+import { bandPositions, drawLimb, drawTube, forEachSpark } from "../engine/body.ts";
 import type { Spark, Spine } from "../engine/body.ts";
 import { Canvas, flipArt, parseArt } from "../engine/canvas.ts";
 import type { Art } from "../engine/canvas.ts";
@@ -11,6 +11,7 @@ import {
   openSpline,
   project,
   round,
+  scatter,
   smooth,
   TAU,
   yawFromTravel,
@@ -25,7 +26,9 @@ const FRAMES = 200;
 const MARGIN = 2;
 const FLAP_CYCLES = 24;
 const SWAY_CYCLES = 12;
-const EMBERS = 44;
+// Sparks puff from the snout in short bursts.
+const BURSTS = 3;
+const SPARKS_PER_BURST = 4;
 const LOCAL = 140; // size of the canvas each sprite is drawn on
 const ORIGIN = LOCAL / 2;
 const ELEVATION = 0.25;
@@ -35,8 +38,8 @@ const WAYPOINTS: readonly Point[] = [
   [44, 92],
   [72, 62],
   [104, 78],
-  [137, 50],
-  [140, 88],
+  [134, 50],
+  [136, 88],
   [110, 96],
   [82, 84],
   [92, 52],
@@ -63,8 +66,6 @@ const COLOUR_NAMES = [
   "white",
   "fireOuter",
   "fireMid",
-  "fireInner",
-  "fireCore",
 ] as const;
 const C = colourIndexes(COLOUR_NAMES);
 
@@ -85,53 +86,58 @@ const ART_KEY = {
 
 const HEAD_SIDE = parseArt(
   `
-ff........................
-.fff.....ooooo............
-..ffff.oohhhhhoo..........
-...ffffohhnnhhhoo.........
-fff.gggoooonnnhooo........
-.ffffgooooowwknnooooo.ii..
-..fffgooooowkkkooooooiij..
-...gggooooowkkkoooooooooo.
-.....ggooooooooooooooooono
-......gooooonnoooooooooooo
-......sooooooonnnnnnnnnnnn
-.......sssoooocccccwcccc..
-.........ssssccccccccccc..
-...........sssddddddddd...
-..............dddddd......
+.i............................
+..iii.........................
+.....iiij.....................
+........jiiii...........hh....
+...jj....iihhhhhhh....hhhhoo..
+.....jjj.oooookkoohhhhhhhhno..
+........jssoooookwoooooooooooo
+.......ffosooooooosssssssssss.
+....gffffsooooonnnnnnnnnnnnnn.
+.....gfffsoooccccccccwccc.....
+......ggfssssddddddddd........
 `,
   ART_KEY,
 );
-const HEAD_SIDE_ANCHOR: Point = [9, 10]; // the pixel that sits on the end of the neck
-const HEAD_SIDE_EYE_ROWS = [5, 8] as const;
 
 const HEAD_FRONT = parseArt(
   `
-.....................
-f...................f
-ff.....ooooooo.....ff
-.ff..oohhhhhhhoo..ff.
-.fffoohhhhhhhhhoofff.
-..ggoooohhhhhoooogg..
-f.ggonnnooooonnnogg.f
-.ffgowkkooooowkkogff.
-..fgokkkooiookkkogf..
-...goohhhhihhhhoog...
-....oohhnhhhnhhoo....
-....sohhhhhhhhhos....
-.....sooooooooos.....
-.....ssnnnnnnnss.....
-......scccccccs......
-.......ddddddd.......
+.i...................i.
+..ii...............ii..
+....ii...........ii....
+.....ijhhhhhhhhhji.....
+......ohhhhhhhhho......
+......okkoooookko......
+...ffsookwooowkoosff...
+...gffsoohhhhhoosffg...
+....fffsonooonosfff....
+.....gfsooooooosfg.....
+........snnnnns........
+.........scccs.........
+..........ddd..........
 `,
   ART_KEY,
 );
-const HEAD_FRONT_ANCHOR: Point = [10, 11];
 
-function withEyeShut(art: Art): Art {
+/** A head's art, with the pixels it is placed and fed by, each as (x, y) in its art. */
+interface Head {
+  side: Art;
+  sideLeft: Art;
+  blink: Art;
+  blinkLeft: Art;
+  front: Art;
+  /** The pixel that sits on the end of the neck. */
+  anchor: Point;
+  frontAnchor: Point;
+  /** Where sparks leave: the nostril in profile, the mouth head-on. */
+  nose: Point;
+  frontNose: Point;
+}
+
+/** Close the eye across the rows from `first` up to but not including `last`. */
+function withEyeShut(art: Art, [first, last]: readonly [number, number]): Art {
   const pixels = art.pixels.slice();
-  const [first, last] = HEAD_SIDE_EYE_ROWS;
   const columns = new Set<number>();
   for (let y = first; y < last; y++) {
     for (let x = 0; x < art.width; x++) {
@@ -146,13 +152,62 @@ function withEyeShut(art: Art): Art {
   return { ...art, pixels };
 }
 
-const HEADS = {
-  side: HEAD_SIDE,
-  sideLeft: flipArt(HEAD_SIDE),
-  blink: withEyeShut(HEAD_SIDE),
-  blinkLeft: flipArt(withEyeShut(HEAD_SIDE)),
-  front: HEAD_FRONT,
-};
+function makeHead(
+  side: Art,
+  eyeRows: readonly [number, number],
+  front: Art,
+  anchors: { side: Point; front: Point },
+  noses: { side: Point; front: Point },
+): Head {
+  const shut = withEyeShut(side, eyeRows);
+  return {
+    side,
+    sideLeft: flipArt(side),
+    blink: shut,
+    blinkLeft: flipArt(shut),
+    front,
+    anchor: anchors.side,
+    frontAnchor: anchors.front,
+    nose: noses.side,
+    frontNose: noses.front,
+  };
+}
+
+const FULL_HEAD = makeHead(HEAD_SIDE, [5, 7], HEAD_FRONT, { side: [10, 10], front: [11, 10] }, { side: [28, 5], front: [11, 10] });
+
+const HEAD_SIDE_SMALL = parseArt(
+  `
+.i...............
+..iii............
+....iijhhhh.hhh..
+...jj.oookkhhhhn.
+......soookwooooo
+....gffsonnnnnnnn
+.....gfsoocccccc.
+.......ssssddddd.
+`,
+  ART_KEY,
+);
+
+const HEAD_FRONT_SMALL = parseArt(
+  `
+.i...........i.
+..ii.......ii..
+...ijhhhhhji...
+....okkokko....
+..ffsowhwosff..
+...gsoohoosg...
+.....snons.....
+.....snnns.....
+......scs......
+.......d.......
+`,
+  ART_KEY,
+);
+
+// Hatchlings and juveniles get a head drawn smaller, so they don't look big-headed.
+const SMALL_HEAD = makeHead(HEAD_SIDE_SMALL, [3, 5], HEAD_FRONT_SMALL, { side: [8, 6], front: [7, 7] }, { side: [16, 4], front: [7, 7] });
+const HEADS: readonly Head[] = [SMALL_HEAD, SMALL_HEAD, FULL_HEAD, FULL_HEAD];
 
 // (forward, up, radius) from the base of the skull to the tip of the tail.
 const SPINE = [
@@ -288,15 +343,37 @@ function animatedSpine(pose: Pose, size: Size): Spine {
   return { x: spineX, y, z, radius: spineR };
 }
 
-function tailTip(pose: Pose, spine: Spine): Point {
-  const last = SAMPLES - 1;
-  return project(pose.view, spine.x[last], spine.y[last], spine.z[last]);
-}
-
 const TUBE = { fill: C.body, low: C.bodyLo, high: C.bodyHi, belly: C.belly, bellyLow: C.bellyLo, line: C.line };
 
-function drawChain(canvas: Canvas, pose: Pose, spine: Spine, include: (u: number) => boolean): void {
+/** Thin lines across the belly, so it reads as plates rather than one smooth patch. */
+function drawBellyPlates(canvas: Canvas, pose: Pose, spine: Spine, k: number, include: (u: number) => boolean): void {
+  const { x, y, z, radius } = spine;
+  const dx = gradient(x);
+  const dy = gradient(y);
+  const belly = canvas.mask();
+  canvas.pixels.forEach((colour, i) => {
+    belly.bits[i] = colour === C.belly ? 1 : 0;
+  });
+  const plates = canvas.mask();
+  for (const u of bandPositions(0.1, 0.07, k, 6)) {
+    if (!include(u)) continue;
+    const j = Math.trunc(u * (SAMPLES - 1));
+    const length = Math.hypot(dx[j], dy[j]);
+    const r = radius[j];
+    const underX = x[j] + (-dy[j] / length) * r * 0.72;
+    const underY = y[j] + (dx[j] / length) * r * 0.72;
+    const across = [(-dy[j] / length) * r * 0.45, (dx[j] / length) * r * 0.45];
+    plates.addLine([
+      project(pose.view, underX - across[0], underY - across[1], z[j]),
+      project(pose.view, underX + across[0], underY + across[1], z[j]),
+    ]);
+  }
+  canvas.fill(plates.and(belly), C.bellyLo);
+}
+
+function drawChain(canvas: Canvas, pose: Pose, spine: Spine, k: number, include: (u: number) => boolean): void {
   drawTube(canvas, pose.view, spine, TUBE, (i) => include(SPINE_U[i]), (i) => SPINE_U[i] < 0.82);
+  drawBellyPlates(canvas, pose, spine, k, include);
 }
 
 function drawSpikes(canvas: Canvas, pose: Pose, spine: Spine, k: number): void {
@@ -419,61 +496,77 @@ function drawWing(canvas: Canvas, pose: Pose, side: number, size: Size, marks: n
   }
 }
 
+interface HeadPlacement {
+  art: Art;
+  left: number;
+  top: number;
+  /** Where sparks leave, in sprite pixels. */
+  nose: Point;
+  /** Which way the snout points: 1 right, -1 left, 0 toward the viewer. */
+  facing: number;
+}
+
 /** Hand-drawn head art, held level like a real animal's as the body pitches. */
-function drawHead(canvas: Canvas, pose: Pose, spine: Spine): void {
+function placeHead(pose: Pose, spine: Spine, head: Head): HeadPlacement {
   const [hx, hy] = project(pose.view, spine.x[0], spine.y[0], spine.z[0]);
   const cosYaw = Math.cos(pose.view.yaw);
   let art: Art;
-  let anchorX: number;
-  let anchorY: number;
+  let [anchorX, anchorY] = head.anchor;
+  let [noseX, noseY] = head.nose;
+  let facing = 1;
   if (Math.abs(cosYaw) > 0.5) {
-    [anchorX, anchorY] = HEAD_SIDE_ANCHOR;
     if (cosYaw < 0) {
-      art = pose.blink ? HEADS.blinkLeft : HEADS.sideLeft;
+      art = pose.blink ? head.blinkLeft : head.sideLeft;
       anchorX = art.width - 1 - anchorX;
+      noseX = art.width - 1 - noseX;
+      facing = -1;
     } else {
-      art = pose.blink ? HEADS.blink : HEADS.side;
+      art = pose.blink ? head.blink : head.side;
     }
   } else {
-    art = HEADS.front;
-    [anchorX, anchorY] = HEAD_FRONT_ANCHOR;
+    art = head.front;
+    [anchorX, anchorY] = head.frontAnchor;
+    [noseX, noseY] = head.frontNose;
+    facing = 0;
   }
-  canvas.stampArt(art, round(hx) - anchorX, round(hy) - anchorY, C.line);
+  const left = round(hx) - anchorX;
+  const top = round(hy) - anchorY;
+  return { art, left, top, nose: [left + noseX, top + noseY], facing };
 }
 
-/** Nested tongues of fire that lean away from the direction of travel. */
-function drawFlame(canvas: Canvas, pose: Pose, spine: Spine, scale: number): void {
-  const [ox, oy] = tailTip(pose, spine);
-  const lean = -clamp(pose.vx * 0.22, -1.1, 1.1);
-  // [sideways reach, length, whole flickers per loop, phase]
-  const tongues = [
-    [0, 1, 31, 0],
-    [-2.4 * scale, 0.62, 43, 1.7],
-    [2.2 * scale, 0.7, 37, 3.1],
-  ];
-  const layers = [
-    [C.fireOuter, 1],
-    [C.fireMid, 0.72],
-    [C.fireInner, 0.46],
-    [C.fireCore, 0.22],
-  ];
-  for (const [colour, size] of layers) {
-    const mask = canvas.mask();
-    for (const [sideways, length, cycles, phase] of tongues) {
-      const flicker = 0.85 + 0.15 * Math.sin(TAU * cycles * pose.t + phase);
-      const reach = 16 * scale * length * flicker * size ** 0.6;
-      for (let n = 0; n < 14; n++) {
-        const k = n / 13;
-        const wiggle = k * 1.3 * scale * Math.sin(TAU * (cycles + 11) * pose.t - 5 * k + phase);
-        mask.addDisc(
-          ox + k * (lean * reach + sideways) + wiggle,
-          oy + (1 - size) * 2 * scale - k * reach,
-          4.2 * scale * size * (1 - k) ** 0.75 + 0.35,
-        );
-      }
-    }
-    canvas.fill(mask, colour);
+function drawHead(canvas: Canvas, pose: Pose, spine: Spine, head: Head): void {
+  const { art, left, top } = placeHead(pose, spine, head);
+  canvas.stampArt(art, left, top, C.line);
+}
+
+/** A flat arrowhead fin in the wing colours, facing the viewer, pointing the way the tail does. */
+function drawTailFin(canvas: Canvas, pose: Pose, spine: Spine, k: number): void {
+  const last = SAMPLES - 1;
+  const at = (i: number) => project(pose.view, spine.x[i], spine.y[i], spine.z[i]);
+  const [tipX, tipY] = at(last);
+  const [backX, backY] = at(last - 6);
+  let dx = tipX - backX;
+  let dy = tipY - backY;
+  const length = Math.hypot(dx, dy);
+  // Seen end-on the tail has no direction, so let it point up.
+  if (length < 1) {
+    dx = 0;
+    dy = -1;
+  } else {
+    dx /= length;
+    dy /= length;
   }
+  const reach = 9 * k;
+  const half = 3.4 * k;
+  const point = (along: number, across: number): Point => [
+    tipX + dx * along - dy * across,
+    tipY + dy * along + dx * across,
+  ];
+  const outline = [point(0, 0), point(reach * 0.4, half), point(reach, 0), point(reach * 0.4, -half)];
+  const fin = canvas.mask().addPolygon(outline);
+  canvas.sticker(fin, C.wing, C.line);
+  const vein = canvas.mask().addLine([point(reach * 0.15, 0), point(reach * 0.85, 0)]);
+  canvas.fill(vein.and(fin), C.wingLo);
 }
 
 function renderSprite(pose: Pose, traits: Traits): Canvas {
@@ -489,13 +582,13 @@ function renderSprite(pose: Pose, traits: Traits): Canvas {
   let tailDepth: number;
   if (Math.abs(cosYaw) > 0.5) {
     tailDepth = 0;
-    parts.push([0, () => drawChain(canvas, pose, spine, () => true)]);
+    parts.push([0, () => drawChain(canvas, pose, spine, k, () => true)]);
   } else {
     // Facing the viewer, the tail passes behind the body and the neck in front.
     tailDepth = -8;
-    parts.push([-8, () => drawChain(canvas, pose, spine, (u) => u >= HIP)]);
-    parts.push([0, () => drawChain(canvas, pose, spine, (u) => u >= CHEST && u <= HIP + 0.02)]);
-    parts.push([8, () => drawChain(canvas, pose, spine, (u) => u <= CHEST + 0.02)]);
+    parts.push([-8, () => drawChain(canvas, pose, spine, k, (u) => u >= HIP)]);
+    parts.push([0, () => drawChain(canvas, pose, spine, k, (u) => u >= CHEST && u <= HIP + 0.02)]);
+    parts.push([8, () => drawChain(canvas, pose, spine, k, (u) => u <= CHEST + 0.02)]);
   }
   for (const side of [1, -1]) {
     parts.push([side * cosYaw * 15 - sinYaw * 5, () => drawWing(canvas, pose, side, size, traits.marks)]);
@@ -506,17 +599,13 @@ function renderSprite(pose: Pose, traits: Traits): Canvas {
     parts.push([arm[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, arm, z, 2.3 * k, 1.3 * k, limb)]);
     parts.push([leg[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, leg, z, 3.6 * k, 1.6 * k, limb)]);
   }
-  parts.push([12, () => drawHead(canvas, pose, spine)]);
-  parts.push([tailDepth + 0.5, () => drawFlame(canvas, pose, spine, k)]);
+  parts.push([12, () => drawHead(canvas, pose, spine, HEADS[traits.stage])]);
+  parts.push([tailDepth + 0.5, () => drawTailFin(canvas, pose, spine, k)]);
 
   parts.sort((a, b) => a[0] - b[0]);
   for (const [, draw] of parts) draw();
 
-  canvas.strengthenEdges([
-    [C.line, C.rim],
-    [C.fireInner, C.fireOuter],
-    [C.fireCore, C.fireOuter],
-  ]);
+  canvas.strengthenEdges([[C.line, C.rim]]);
   return canvas;
 }
 
@@ -525,20 +614,30 @@ function spriteOffset(pose: Pose, k: number): Point {
   return [round(pose.x) - ORIGIN, round(pose.y + bob) - ORIGIN];
 }
 
-const prepare = perTraits((traits): { poses: Pose[]; embers: Spark[] } => {
+/** A few sparks puffed from the snout at a time, drifting up and a little ahead of the dragon. */
+function snoutSparks(poses: readonly Pose[], traits: Traits): Spark[] {
   const size = SIZES[traits.stage];
+  const head = HEADS[traits.stage];
+  return Array.from({ length: BURSTS * SPARKS_PER_BURST }, (_, n) => {
+    const burst = Math.floor(n / SPARKS_PER_BURST);
+    const birth = (20 + Math.floor((burst * FRAMES) / BURSTS) + (n % SPARKS_PER_BURST) * 3) % FRAMES;
+    const pose = poses[birth];
+    const { nose, facing } = placeHead(pose, animatedSpine(pose, size), head);
+    const [ox, oy] = spriteOffset(pose, size.scale);
+    return {
+      birth,
+      life: 9 + round(scatter(n, 0.754878) * 6),
+      x: nose[0] + ox + facing,
+      y: nose[1] + oy,
+      vx: facing * 0.3 + (scatter(n, 0.56984) - 0.5) * 0.3,
+      vy: -0.7 + scatter(n, 0.438744) * 0.35,
+    };
+  });
+}
+
+const prepare = perTraits((traits): { poses: Pose[]; embers: Spark[] } => {
   const poses = buildPoses(traits);
-  const embers = makeSparks(
-    EMBERS,
-    FRAMES,
-    (birth) => {
-      const [ox, oy] = spriteOffset(poses[birth], size.scale);
-      const [tipX, tipY] = tailTip(poses[birth], animatedSpine(poses[birth], size));
-      return [tipX + ox, tipY + oy - 6 * size.scale];
-    },
-    { life: [8, 17], vx: [-0.35, 0.35], vy: [-0.8, -0.35] },
-  );
-  return { poses, embers };
+  return { poses, embers: snoutSparks(poses, traits) };
 });
 
 function draw(index: number, traits: Traits): Uint8Array {
@@ -558,8 +657,8 @@ function draw(index: number, traits: Traits): Uint8Array {
 export const dragon = defineCritter({
   id: "dragon",
   name: "Dragon",
-  blurb: "Flaps, soars and turns to look at you, with a flame for a tail tip.",
-  alt: "Animated pixel art of a dragon with a flaming tail, flapping its wings as it wanders around the frame",
+  blurb: "Flaps, soars and turns to look at you, puffing little sparks.",
+  alt: "Animated pixel art of a dragon with a spade-tipped tail, flapping its wings as it wanders around the frame",
   width: WIDTH,
   height: HEIGHT,
   frames: FRAMES,
@@ -567,7 +666,7 @@ export const dragon = defineCritter({
   poster: 46,
   colourNames: COLOUR_NAMES,
   bodyColour: "body",
-  accentColours: ["wingHi", "wing", "wingLo", "wingFar", "wingFarLo", "fireOuter", "fireMid", "fireInner", "fireCore"],
+  accentColours: ["wingHi", "wing", "wingLo", "wingFar", "wingFarLo", "fireOuter", "fireMid"],
   fixedColours: ["horn", "hornLo", "eye", "white"],
   edgeColours: ["rim", "fireOuter", "fireMid"],
   colourways: [
@@ -575,26 +674,24 @@ export const dragon = defineCritter({
       id: "ember",
       name: "Ember",
       colours: {
-        rim: "#b4451a",
-        line: "#5e2110",
-        body: "#f58a2c",
-        bodyHi: "#ffb65c",
-        bodyLo: "#d4641f",
-        belly: "#ffe6ad",
-        bellyLo: "#f0bd7a",
-        wingHi: "#e65a45",
-        wing: "#c93a3c",
-        wingLo: "#9c2a3c",
-        wingFar: "#a02f3e",
-        wingFarLo: "#7f2536",
-        horn: "#fff3d0",
-        hornLo: "#e3c48c",
-        eye: "#2a1408",
+        rim: "#a8322a",
+        line: "#561418",
+        body: "#c9403a",
+        bodyHi: "#e8695a",
+        bodyLo: "#9e2c30",
+        belly: "#f0c46a",
+        bellyLo: "#cf9a45",
+        wingHi: "#6a4a8c",
+        wing: "#4f3472",
+        wingLo: "#3b2658",
+        wingFar: "#432c60",
+        wingFarLo: "#33214b",
+        horn: "#f4ead0",
+        hornLo: "#cdbb94",
+        eye: "#1c0f12",
         white: "#ffffff",
         fireOuter: "#e9401c",
         fireMid: "#ff8a1f",
-        fireInner: "#ffd23d",
-        fireCore: "#fff6c2",
       },
     },
     {
@@ -619,8 +716,6 @@ export const dragon = defineCritter({
         white: "#ffffff",
         fireOuter: "#2a7de1",
         fireMid: "#45b4f5",
-        fireInner: "#a8ecff",
-        fireCore: "#f0fdff",
       },
     },
     {
@@ -645,8 +740,6 @@ export const dragon = defineCritter({
         white: "#ffffff",
         fireOuter: "#2f9e2f",
         fireMid: "#67c93a",
-        fireInner: "#c8f25a",
-        fireCore: "#f6ffd0",
       },
     },
   ],
