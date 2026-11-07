@@ -12,6 +12,16 @@ Pixel-art critters for your GitHub profile README. Pick one, see how it looks on
 4. The workflow draws the critter, saves `critter.gif`, and adds it to the top of your README. Your existing text stays as it is.
 5. Every night, just after midnight UTC, it runs again and redraws the critter from your public GitHub activity.
 
+### The egg
+
+By default the workflow starts with a speckled egg, coloured from your languages, rather than the critter. The egg cracks as you contribute, and hatches into the critter you picked after 25 contributions since you added the workflow. After that it follows the activity rules below.
+
+The count starts the day you add the workflow, not from your lifetime total, so everyone starts with an egg. The date comes from the first commit of the workflow file, so there's nothing extra stored in your repo.
+
+**Surprise me** means you don't pick. The critter is chosen from your username, and nothing, including the logs, the commit messages and the image's description, says which one until it hatches.
+
+To skip the egg and get the critter straight away, turn off "Start from an egg" on the site, or leave out `egg: true` from the workflow.
+
 There's nothing to sign in to and no server. Everything on the site runs in your browser, and the workflow runs on your repo's own GitHub Actions with its built-in token.
 
 ### What your activity changes
@@ -24,12 +34,13 @@ You pick the species. Your activity decides how it looks.
 | Lifetime contributions | Size | Hatchling under 100, young from 100, grown from 1,000, elder from 5,000 |
 | Longest streak in the past year | Marks | None under 7 days, one mark from 7, two from 30, three from 100 |
 | Contributions yesterday (UTC) | Motion | Resting at 0, steady from 1, lively from 5 |
+| Contributions since you added the workflow | Egg | One more crack every quarter of the way, and hatches after 25 contributions |
 
 Marks follow the longest streak, not the current one, so missing a day doesn't take one away, though a streak stops counting once it's more than a year old. Days are UTC.
 
 The site can't read contributions without a token, so its preview uses your real languages and lets you try each size, mark and motion. The real critter comes from your activity when the workflow runs.
 
-If GitHub's data can't be read, the critter you already have stays and the run still passes, with a warning. On a first run it draws the default art.
+If GitHub's data can't be read, the critter you already have stays and the run still passes, with a warning. On a first run it draws the default art, or an uncracked egg if the egg is on.
 
 Each night's run commits only when the GIF changes, which adds roughly 300 to 800 KB to your profile repo's history each time. If nothing has changed for 50 days, it makes an empty commit, because GitHub turns off scheduled workflows in public repos after 60 days without activity.
 
@@ -62,6 +73,7 @@ jobs:
       - uses: aryamantepal/git-critters@v1
         with:
           activity: true
+          egg: true
           critter: dragon
           colour: languages
 ```
@@ -74,6 +86,8 @@ jobs:
 | `ghost` | `moon`, `mint`, `peach` |
 
 `colour: languages` colours the critter from your languages, and is what you get if you leave `colour` out while `activity` is on. A colour from the table always wins over languages, and size, marks and motion still apply.
+
+`egg: true` starts as an egg that hatches into the critter, and needs `activity: true`. Without it you get the critter straight away, so delete the line to skip the egg. `critter: surprise` leaves the choice to the egg, and turns it on whether or not `egg` is there. It needs `activity: true` too, and `colour` has to be `languages` or left out, since each fixed colour belongs to one critter. With a named critter and a fixed `colour`, the egg uses your language colours and the hatched critter uses the fixed one.
 
 To swap critters, change those two lines and commit. To remove it, delete the workflow, `critter.gif`, and the block between the `git-critters` comments in your README.
 
@@ -90,10 +104,11 @@ The rules:
 - Every critter must be an original design.
 - Every motion must complete a whole number of cycles over the loop, so the last frame flows into the first.
 - Draw from `Traits` (`stage`, `marks`, `mood`). `DEFAULT_TRAITS` must give the art you'd ship without them. Size is a re-render of the geometry at `STAGE_SCALE`, inside the same frame. Marks reuse colours you already have and are placed on the body, so they move with it and show at every stage. Mood sets whole-number cycles through `cyclesFor`, how far it roams through `roam`, and how long it keeps its eyes shut through `blinkFrames`. Keep the memo in `perTraits`, so only the latest traits are held.
+- A new critter isn't part of "Surprise me" until you decide it should be. The surprise is chosen by hashing the login into `SURPRISE_POOL` in `src/activity/egg.ts`, which is its own list, not `critters`. Never reorder it or extend it in place, since that changes the critter people have already been promised.
 - Say which colours are `accentColours` (they take the second language's hue), `fixedColours` (they never change), and `edgeColours` (they reach the silhouette), and which one is the `bodyColour`.
 - Outlines have to show on both white and `#0d1117`, since GIF transparency is all or nothing.
 
-The tests apply to every critter and colourway automatically, and again across the ends of each trait's range. They read GIFs back and check that they hold exactly what was drawn, never leave the frame, loop without a jump, show on both themes, and stay under 1 MB. They also check that every language's colours keep the outline showing. Each critter's GIF is byte-for-byte repeatable, and with the default traits all 12 colourways are locked to the hashes they had before traits existed.
+The tests apply to every critter and colourway automatically, and again across the ends of each trait's range. They read GIFs back and check that they hold exactly what was drawn, never leave the frame, loop without a jump, show on both themes, and stay under 1 MB. They also check that every language's colours keep the outline showing. The egg (`src/critters/egg.ts`, not in the list, since nobody picks it) passes the same checks at every crack level. Each critter's GIF is byte-for-byte repeatable, and with the default traits all 12 colourways are locked to the hashes they had before traits existed.
 
 ## Develop
 

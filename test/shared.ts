@@ -12,6 +12,12 @@ for (const stage of [0, 3] as const) {
   }
 }
 
+// For the egg, stage is the crack level and marks do nothing, so try every crack level instead.
+export const EGG_TRAITS: Traits[] = [];
+for (const stage of [0, 1, 2, 3] as const) {
+  for (const mood of ["resting", "steady", "lively"] as Mood[]) EGG_TRAITS.push({ stage, marks: 0, mood });
+}
+
 export const describeTraits = (t: Traits) => `stage ${t.stage}, ${t.marks} marks, ${t.mood}`;
 
 /** The palette indexes that border empty space in any frame. */

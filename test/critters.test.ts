@@ -1,6 +1,7 @@
 // Every critter and colourway has to pass these, so adding one is mostly art.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { egg } from "../src/critters/egg.ts";
 import { critters } from "../src/critters/index.ts";
 import { paletteOf, SCALE } from "../src/engine/critter.ts";
 import { encodeGif } from "../src/engine/gif.ts";
@@ -8,17 +9,20 @@ import { DEFAULT_TRAITS, traitsKey } from "../src/engine/traits.ts";
 import type { Traits } from "../src/engine/traits.ts";
 import { decodeGif } from "./decode.ts";
 import type { DecodedGif } from "./decode.ts";
-import { assertEdgesShow, describeTraits, edgeColoursOf, EXTREMES } from "./shared.ts";
+import { assertEdgesShow, describeTraits, edgeColoursOf, EGG_TRAITS, EXTREMES } from "./shared.ts";
 
 const MAX_BYTES = 1_000_000;
 
-// Reading a GIF back is the slow part, so only these four are, along with the default.
+// Reading a GIF back is the slow part, so only these are, along with the default.
+// The last two are the egg's other crack levels, which the others don't use.
 const READ_BACK = new Set(
   [
     { stage: 0, marks: 3, mood: "resting" },
     { stage: 0, marks: 0, mood: "lively" },
     { stage: 3, marks: 3, mood: "lively" },
     { stage: 3, marks: 0, mood: "resting" },
+    { stage: 1, marks: 0, mood: "steady" },
+    { stage: 2, marks: 0, mood: "lively" },
   ].map((t) => traitsKey(t as Traits)),
 );
 
@@ -33,7 +37,7 @@ function gifOf(critterId: string, wayId: string, traits: Traits = DEFAULT_TRAITS
   const key = `${critterId}/${wayId}/${traitsKey(traits)}`;
   let entry = decoded.get(key);
   if (!entry) {
-    const critter = critters.find((c) => c.id === critterId)!;
+    const critter = [...critters, egg].find((c) => c.id === critterId)!;
     const bytes = encodeGif(critter, wayId, traits);
     entry = { gif: decodeGif(bytes), size: bytes.length };
     decoded.set(key, entry);
@@ -47,7 +51,8 @@ test("ids are unique and usable in a workflow", () => {
   for (const id of ids) assert.match(id, /^[a-z][a-z0-9-]*$/);
 });
 
-for (const critter of critters) {
+// The egg isn't a species, but it has to pass the same checks, at every crack level.
+for (const critter of [...critters, egg]) {
   describe(critter.name, () => {
     test("draws the same frame every time, in any order", () => {
       for (const i of [0, Math.floor(critter.frames / 2), critter.frames - 1]) {
@@ -83,7 +88,7 @@ for (const critter of critters) {
 
     const way = critter.colourways[0];
 
-    for (const traits of EXTREMES) {
+    for (const traits of critter === egg ? EGG_TRAITS : EXTREMES) {
       const when = describeTraits(traits);
       const isDefault = traitsKey(traits) === traitsKey(DEFAULT_TRAITS);
       const readBack = isDefault || READ_BACK.has(traitsKey(traits));
@@ -157,8 +162,7 @@ for (const critter of critters) {
     }
 
     test("draws the same frame for the same traits, whatever was drawn in between", () => {
-      const [a, b] = [EXTREMES[0], EXTREMES[EXTREMES.length - 1]];
-      const first = critter.frame(9, a).slice();
+      const [a, b] = [EXTREMES[0], EXTREMES[EXTREMES.length - 1]];      const first = critter.frame(9, a).slice();
       critter.frame(9, b);
       assert.deepEqual(critter.frame(9, a), first);
       assert.deepEqual(critter.draw(9, a), first);

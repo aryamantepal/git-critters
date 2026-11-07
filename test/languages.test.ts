@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { languageColourway, LANGUAGES_COLOURWAY } from "../src/activity/colourway.ts";
 import { LANGUAGE_COLOURS, topLanguages } from "../src/activity/languages.ts";
+import { egg } from "../src/critters/egg.ts";
 import { critters } from "../src/critters/index.ts";
 import { paletteOf } from "../src/engine/critter.ts";
 import { encodeGif } from "../src/engine/gif.ts";
@@ -63,7 +64,7 @@ function hueGap(a: number, b: number): number {
   return Math.min(gap, 360 - gap);
 }
 
-for (const critter of critters) {
+for (const critter of [...critters, egg]) {
   describe(`${critter.name} in a person's languages`, () => {
     const base = critter.colourways[0];
 
