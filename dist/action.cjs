@@ -2821,12 +2821,24 @@ function critterBlock(critter, gifPath) {
     END
   ].join("\n");
 }
+var OTHER_CREATURES = ["github.com/yalongwastaken/git-koi"];
+function otherCreature(readme) {
+  for (const match of readme.matchAll(/<p\b[^>]*>[\s\S]*?<\/p>/gi)) {
+    const html = match[0];
+    if (/<img\b/i.test(html) && OTHER_CREATURES.some((repo) => html.includes(repo))) {
+      return { start: match.index, end: match.index + html.length };
+    }
+  }
+  return null;
+}
 function withCritterBlock(readme, block) {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
   if (start !== -1 && end > start) {
     return readme.slice(0, start) + block + readme.slice(end + END.length);
   }
+  const other = otherCreature(readme);
+  if (other) return readme.slice(0, other.start) + block + readme.slice(other.end);
   return readme.trim() === "" ? `${block}
 ` : `${block}
 

@@ -36,3 +36,30 @@ test("adding the same critter twice changes nothing", () => {
   const once = withCritterBlock("# Hello\n", block);
   assert.equal(withCritterBlock(once, block), once);
 });
+
+const koi = [
+  '<p align="center">',
+  '  <img src="koi/koi.gif" width="256" alt="My koi" />',
+  "  <br />",
+  '  <sub>Drawn by <a href="https://github.com/yalongwastaken/git-koi">git-koi</a></sub>',
+  "</p>",
+].join("\n");
+
+test("takes the place of a git-koi koi, leaving the rest untouched", () => {
+  const before = `<h1 align="center">Hi</h1>\n\n${koi}\n\nAbout me.\n\n<p>A photo <img src="me.png" /></p>\n`;
+  assert.equal(
+    withCritterBlock(before, block),
+    `<h1 align="center">Hi</h1>\n\n${block}\n\nAbout me.\n\n<p>A photo <img src="me.png" /></p>\n`,
+  );
+});
+
+test("an earlier critter wins over a koi, so the koi stays put", () => {
+  const before = `${koi}\n\n${block}\n`;
+  const swapped = critterBlock(ghost, "critter.gif");
+  assert.equal(withCritterBlock(before, swapped), `${koi}\n\n${swapped}\n`);
+});
+
+test("a link to git-koi without its image is left alone", () => {
+  const readme = '<p>I like <a href="https://github.com/yalongwastaken/git-koi">git-koi</a>.</p>\n';
+  assert.equal(withCritterBlock(readme, block), `${block}\n\n${readme}`);
+});
