@@ -9,6 +9,7 @@ import { DEFAULT_TRAITS } from "../engine/traits.ts";
 import type { Traits } from "../engine/traits.ts";
 import { CRITTER_SLOT, lookUpProfile, prepareReadme } from "./github.ts";
 import type { Profile } from "./github.ts";
+import { hasOtherCreature, OTHER_CREATURE_LEFTOVERS } from "../action/readme.ts";
 import { addLink, createRepoLink, editLink, isValidUsername } from "./links.ts";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -444,9 +445,11 @@ function renderAction(): void {
         swapHelp.hidden = false;
       } else {
         setAdd("Add to my profile", addLink(profile.login, profile.branch, critter, colour, eggOn()));
-        statusLine.textContent = profile.readmeHtml
-          ? "That's your real README underneath."
-          : "You don't have a README yet, so this will start one.";
+        statusLine.textContent = !profile.readmeHtml
+          ? "You don't have a README yet, so this will start one."
+          : hasOtherCreature(profile.readmeHtml)
+            ? `That's your real README underneath. ${OTHER_CREATURE_LEFTOVERS}`
+            : "That's your real README underneath.";
       }
       break;
     case "unknown":

@@ -2831,6 +2831,10 @@ function otherCreature(readme) {
   }
   return null;
 }
+function hasOtherCreature(readme) {
+  return !(readme.includes(START) && readme.includes(END)) && otherCreature(readme) !== null;
+}
+var OTHER_CREATURE_LEFTOVERS = "This takes the place of your git-koi koi. Its workflow will keep redrawing a GIF nobody sees, so delete .github/workflows/koi.yml and the koi folder.";
 function withCritterBlock(readme, block) {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
@@ -2977,6 +2981,7 @@ async function main() {
   (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(gifPath), { recursive: true });
   (0, import_node_fs.writeFileSync)(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
   (0, import_node_fs.writeFileSync)(readmeName, withCritterBlock(readme, critterBlock(plan.critter, gifPath)));
+  if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
   git("add", "--force", "--", gifPath, readmeName);
   if (git("diff", "--cached", "--name-only").trim() === "") {
     console.log("The critter is already up to date, so there's nothing to commit.");

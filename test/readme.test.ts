@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { critterBlock, withCritterBlock } from "../src/action/readme.ts";
+import { critterBlock, hasOtherCreature, withCritterBlock } from "../src/action/readme.ts";
 import { dragon } from "../src/critters/dragon.ts";
 import { ghost } from "../src/critters/ghost.ts";
 
@@ -62,4 +62,10 @@ test("an earlier critter wins over a koi, so the koi stays put", () => {
 test("a link to git-koi without its image is left alone", () => {
   const readme = '<p>I like <a href="https://github.com/yalongwastaken/git-koi">git-koi</a>.</p>\n';
   assert.equal(withCritterBlock(readme, block), `${block}\n\n${readme}`);
+});
+
+test("knows when a critter would replace a koi, but not when a critter is already there", () => {
+  assert.ok(hasOtherCreature(`# Hi\n\n${koi}\n`));
+  assert.ok(!hasOtherCreature(`${koi}\n\n${block}\n`));
+  assert.ok(!hasOtherCreature("# Hi\n"));
 });

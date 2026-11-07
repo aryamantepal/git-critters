@@ -36,6 +36,15 @@ function otherCreature(readme: string): { start: number; end: number } | null {
   return null;
 }
 
+/** Whether adding a critter would take the place of another creature, for a README in Markdown or GitHub's HTML. */
+export function hasOtherCreature(readme: string): boolean {
+  return !(readme.includes(START) && readme.includes(END)) && otherCreature(readme) !== null;
+}
+
+/** What to tell someone whose koi a critter replaces, since this can't remove another tool's workflow for them. */
+export const OTHER_CREATURE_LEFTOVERS =
+  "This takes the place of your git-koi koi. Its workflow will keep redrawing a GIF nobody sees, so delete .github/workflows/koi.yml and the koi folder.";
+
 /**
  * Swap the block in place if one is already there, or take the spot of another
  * creature like git-koi's, or else put it at the top of the README.
