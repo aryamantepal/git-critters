@@ -14,7 +14,7 @@ import type { Traits } from "../engine/traits.ts";
 import { readActivity, readEggContributions } from "./activity.ts";
 import type { Look } from "./activity.ts";
 import { KEEP_ALIVE_MESSAGE, needsKeepAlive } from "./keepalive.ts";
-import { critterBlock, withCritterBlock } from "./readme.ts";
+import { critterBlock, hasOtherCreature, OTHER_CREATURE_LEFTOVERS, withCritterBlock } from "./readme.ts";
 
 /** The value of `critter` that leaves the choice to the egg. */
 const SURPRISE = "surprise";
@@ -188,6 +188,7 @@ async function main(): Promise<void> {
   mkdirSync(dirname(gifPath), { recursive: true });
   writeFileSync(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
   writeFileSync(readmeName, withCritterBlock(readme, critterBlock(plan.critter, gifPath)));
+  if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
 
   // Forced, because someone's .gitignore shouldn't stop their critter from appearing.
   git("add", "--force", "--", gifPath, readmeName);

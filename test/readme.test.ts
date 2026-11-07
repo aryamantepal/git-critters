@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { critterBlock, withCritterBlock } from "../src/action/readme.ts";
+import { critterBlock, hasOtherCreature, withCritterBlock } from "../src/action/readme.ts";
 import { dragon } from "../src/critters/dragon.ts";
 import { ghost } from "../src/critters/ghost.ts";
 
@@ -35,4 +35,37 @@ test("swaps an earlier critter in place instead of adding another", () => {
 test("adding the same critter twice changes nothing", () => {
   const once = withCritterBlock("# Hello\n", block);
   assert.equal(withCritterBlock(once, block), once);
+});
+
+const koi = [
+  '<p align="center">',
+  '  <img src="koi/koi.gif" width="256" alt="My koi" />',
+  "  <br />",
+  '  <sub>Drawn by <a href="https://github.com/yalongwastaken/git-koi">git-koi</a></sub>',
+  "</p>",
+].join("\n");
+
+test("takes the place of a git-koi koi, leaving the rest untouched", () => {
+  const before = `<h1 align="center">Hi</h1>\n\n${koi}\n\nAbout me.\n\n<p>A photo <img src="me.png" /></p>\n`;
+  assert.equal(
+    withCritterBlock(before, block),
+    `<h1 align="center">Hi</h1>\n\n${block}\n\nAbout me.\n\n<p>A photo <img src="me.png" /></p>\n`,
+  );
+});
+
+test("an earlier critter wins over a koi, so the koi stays put", () => {
+  const before = `${koi}\n\n${block}\n`;
+  const swapped = critterBlock(ghost, "critter.gif");
+  assert.equal(withCritterBlock(before, swapped), `${koi}\n\n${swapped}\n`);
+});
+
+test("a link to git-koi without its image is left alone", () => {
+  const readme = '<p>I like <a href="https://github.com/yalongwastaken/git-koi">git-koi</a>.</p>\n';
+  assert.equal(withCritterBlock(readme, block), `${block}\n\n${readme}`);
+});
+
+test("knows when a critter would replace a koi, but not when a critter is already there", () => {
+  assert.ok(hasOtherCreature(`# Hi\n\n${koi}\n`));
+  assert.ok(!hasOtherCreature(`${koi}\n\n${block}\n`));
+  assert.ok(!hasOtherCreature("# Hi\n"));
 });

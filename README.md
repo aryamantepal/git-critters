@@ -9,7 +9,7 @@ Pixel-art critters for your GitHub profile README. Pick one, see how it looks on
 1. On the site, you cycle through the critters and colours. The preview shows them on top of your real README, in GitHub's light and dark themes.
 2. **Add to my profile** opens GitHub's new-file page with one small workflow already filled in.
 3. You commit it. Choose "Create a new branch" on that screen if you'd rather review it as a pull request.
-4. The workflow draws the critter, saves `critter.gif`, and adds it to the top of your README. Your existing text stays as it is.
+4. The workflow draws the critter, saves `critter.gif`, and adds it to the top of your README. If you already show a koi from [git-koi](https://github.com/yalongwastaken/git-koi), the critter takes its place instead. Your other text stays as it is.
 5. Every night, just after midnight UTC, it runs again and redraws the critter from your public GitHub activity.
 
 ### The egg

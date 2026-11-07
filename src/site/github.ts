@@ -1,6 +1,7 @@
 // Reads public data straight from the visitor's browser, so there's no server or token.
 import { topLanguages } from "../activity/languages.ts";
 import type { RepoLanguage } from "../activity/languages.ts";
+import { OTHER_CREATURES } from "../action/readme.ts";
 import { WORKFLOW_PATH } from "./links.ts";
 
 export type Profile =
@@ -67,13 +68,20 @@ export async function lookUpProfile(username: string): Promise<Profile> {
   }
 }
 
+export const CRITTER_SLOT = "critter-slot";
+
+function isCritter(paragraph: Element): boolean {
+  return paragraph.querySelector('img[src$="/critter.gif"]') !== null;
+}
+
 const REMOVE = "script, style, iframe, object, embed, form, link, meta, base";
 
 /**
  * Prepare someone's README for the preview. GitHub has already sanitised it and the
  * page's content security policy blocks scripts, so this is a second line of defence.
- * It also points relative links at the repo, and drops any critter already in there
- * so the preview doesn't show two.
+ * It also points relative links at the repo. The Action puts the critter where an
+ * earlier critter or another creature like git-koi's is, so the first of those becomes
+ * an empty element with the class CRITTER_SLOT for the preview to fill, and any others go.
  */
 export function prepareReadme(html: string, login: string, branch: string): DocumentFragment {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -118,8 +126,28 @@ export function prepareReadme(html: string, login: string, branch: string): Docu
     link.setAttribute("target", "_blank");
     link.setAttribute("rel", "noopener noreferrer");
   });
+  const creatures = new Set<Element>();
   root.querySelectorAll('img[src$="/critter.gif"]').forEach((image) => {
-    image.closest("p")?.remove();
+    const paragraph = image.closest("p");
+    if (paragraph) creatures.add(paragraph);
+  });
+  root.querySelectorAll("a").forEach((link) => {
+    const href = link.getAttribute("href") ?? "";
+    const paragraph = link.closest("p");
+    if (paragraph?.querySelector("img") && OTHER_CREATURES.some((repo) => href.includes(repo))) {
+      creatures.add(paragraph);
+    }
+  });
+  // The Action prefers an earlier critter's spot, so the preview does too.
+  const ordered = [...creatures].sort((a, b) => Number(isCritter(b)) - Number(isCritter(a)));
+  ordered.forEach((paragraph, index) => {
+    if (index === 0) {
+      const slot = doc.createElement("div");
+      slot.className = CRITTER_SLOT;
+      paragraph.replaceWith(slot);
+    } else {
+      paragraph.remove();
+    }
   });
 
   const fragment = document.createDocumentFragment();

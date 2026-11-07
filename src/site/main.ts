@@ -7,8 +7,9 @@ import type { Colourway, Critter } from "../engine/critter.ts";
 import { encodeGif } from "../engine/gif.ts";
 import { DEFAULT_TRAITS } from "../engine/traits.ts";
 import type { Traits } from "../engine/traits.ts";
-import { lookUpProfile, prepareReadme } from "./github.ts";
+import { CRITTER_SLOT, lookUpProfile, prepareReadme } from "./github.ts";
 import type { Profile } from "./github.ts";
+import { hasOtherCreature, OTHER_CREATURE_LEFTOVERS } from "../action/readme.ts";
 import { addLink, createRepoLink, editLink, isValidUsername } from "./links.ts";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -35,6 +36,7 @@ const preview = element("preview");
 const pauseButton = element<HTMLButtonElement>("pause");
 const profileName = element("profile-name");
 const readmeContent = element("readme-content");
+const critterParagraph = stage.closest("p") as HTMLElement;
 const sampleReadme = element<HTMLTemplateElement>("sample-readme");
 
 const state = {
@@ -443,9 +445,11 @@ function renderAction(): void {
         swapHelp.hidden = false;
       } else {
         setAdd("Add to my profile", addLink(profile.login, profile.branch, critter, colour, eggOn()));
-        statusLine.textContent = profile.readmeHtml
-          ? "That's your real README underneath."
-          : "You don't have a README yet, so this will start one.";
+        statusLine.textContent = !profile.readmeHtml
+          ? "You don't have a README yet, so this will start one."
+          : hasOtherCreature(profile.readmeHtml)
+            ? `That's your real README underneath. ${OTHER_CREATURE_LEFTOVERS}`
+            : "That's your real README underneath.";
       }
       break;
     case "unknown":
@@ -456,8 +460,11 @@ function renderAction(): void {
 }
 
 function showReadme(profile: Profile | null): void {
+  // The critter may sit inside the old README, so take it out before that goes.
+  readmeContent.before(critterParagraph);
   if (profile?.kind === "ready" && profile.readmeHtml) {
     readmeContent.replaceChildren(prepareReadme(profile.readmeHtml, profile.login, profile.branch));
+    readmeContent.querySelector(`.${CRITTER_SLOT}`)?.replaceWith(critterParagraph);
   } else if (profile?.kind === "ready") {
     readmeContent.replaceChildren();
   } else {

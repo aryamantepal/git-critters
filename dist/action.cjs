@@ -2821,12 +2821,28 @@ function critterBlock(critter, gifPath) {
     END
   ].join("\n");
 }
+var OTHER_CREATURES = ["github.com/yalongwastaken/git-koi"];
+function otherCreature(readme) {
+  for (const match of readme.matchAll(/<p\b[^>]*>[\s\S]*?<\/p>/gi)) {
+    const html = match[0];
+    if (/<img\b/i.test(html) && OTHER_CREATURES.some((repo) => html.includes(repo))) {
+      return { start: match.index, end: match.index + html.length };
+    }
+  }
+  return null;
+}
+function hasOtherCreature(readme) {
+  return !(readme.includes(START) && readme.includes(END)) && otherCreature(readme) !== null;
+}
+var OTHER_CREATURE_LEFTOVERS = "This takes the place of your git-koi koi. Its workflow will keep redrawing a GIF nobody sees, so delete .github/workflows/koi.yml and the koi folder.";
 function withCritterBlock(readme, block) {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
   if (start !== -1 && end > start) {
     return readme.slice(0, start) + block + readme.slice(end + END.length);
   }
+  const other = otherCreature(readme);
+  if (other) return readme.slice(0, other.start) + block + readme.slice(other.end);
   return readme.trim() === "" ? `${block}
 ` : `${block}
 
@@ -2965,6 +2981,7 @@ async function main() {
   (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(gifPath), { recursive: true });
   (0, import_node_fs.writeFileSync)(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
   (0, import_node_fs.writeFileSync)(readmeName, withCritterBlock(readme, critterBlock(plan.critter, gifPath)));
+  if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
   git("add", "--force", "--", gifPath, readmeName);
   if (git("diff", "--cached", "--name-only").trim() === "") {
     console.log("The critter is already up to date, so there's nothing to commit.");
