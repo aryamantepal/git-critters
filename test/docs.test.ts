@@ -2,7 +2,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { LIVELY_FROM, MARKS_FROM, STAGE_FROM } from "../src/activity/traits.ts";
 import { critters } from "../src/critters/index.ts";
+import { workflowFile } from "../src/site/links.ts";
 
 const readme = readFileSync("README.md", "utf8");
 const action = readFileSync("action.yml", "utf8");
@@ -15,3 +17,17 @@ for (const critter of critters) {
     assert.ok(action.includes(critter.id), "action.yml doesn't mention it");
   });
 }
+
+test("the README's example is the workflow the site generates", () => {
+  const example = /```yaml\n([\s\S]*?)```/.exec(readme)?.[1];
+  assert.equal(example, workflowFile("dragon", "languages"));
+});
+
+test("the README's table of activity states the thresholds the code uses", () => {
+  const row = (start: string) => readme.split("\n").find((line) => line.startsWith(`| ${start}`)) ?? "";
+  const size = row("Lifetime contributions");
+  for (const from of STAGE_FROM) assert.ok(size.includes(`from ${from.toLocaleString("en-US")}`), `size ${from}`);
+  const marks = row("Longest streak");
+  for (const from of MARKS_FROM) assert.ok(marks.includes(`from ${from}`), `marks ${from}`);
+  assert.ok(row("Contributions yesterday").includes(`lively from ${LIVELY_FROM}`));
+});

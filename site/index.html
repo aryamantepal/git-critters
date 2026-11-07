@@ -30,6 +30,16 @@
       <fieldset>
         <legend>Colour</legend>
         <div id="colours" class="colours"></div>
+        <p id="colour-note" class="note"></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Try the rest</legend>
+        <div id="traits" class="traits"></div>
+        <p class="note">
+          This is only a preview. The site can't read your contributions, so it never knows which of these you'd get.
+          The real critter is drawn from your activity each night.
+        </p>
       </fieldset>
 
       <div class="field">
@@ -41,7 +51,7 @@
       <p id="status" class="status" role="status"></p>
 
       <div id="swap-help" class="swap" hidden>
-        <p>Change the last two lines of the file to:</p>
+        <p>Replace everything under <code>with:</code> in the file with:</p>
         <pre id="swap-lines"></pre>
         <button id="copy-swap" type="button" class="quiet">Copy</button>
       </div>
@@ -53,6 +63,7 @@
           <li>You commit it. Choose “Create a new branch” if you'd rather review it as a pull request.</li>
           <li>Within a minute, the workflow draws your critter and adds it to the top of your README.</li>
         </ol>
+        <p>The workflow also runs every night, just after midnight UTC. It reads your public GitHub activity and redraws the critter, and it commits to your profile repo whenever the critter changes. That adds a few hundred KB to the repo's history each time. If nothing has changed for a while, it adds an empty commit now and then, so GitHub doesn't switch the nightly run off.</p>
         <p>There's nothing to sign in to here, and nothing to install. To remove it, delete the workflow, <code>critter.gif</code> and the block it added to your README.</p>
       </details>
 
@@ -62,7 +73,7 @@
 
       <footer>
         <a href="https://github.com/aryamantepal/git-critters">Source</a>
-        <span>Inspired by <a href="https://github.com/yalongwastaken/git-koi">git-koi</a></span>
+        <span>The idea comes from <a href="https://github.com/yalongwastaken/git-koi">git-koi</a></span>
       </footer>
     </aside>
 

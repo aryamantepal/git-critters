@@ -27,10 +27,20 @@ test("the workflow runs when it's committed, and can write to the repo", () => {
   assert.match(file, /uses: aryamantepal\/git-critters@v1/);
 });
 
+test("the workflow also runs each night, one run at a time, drawing from activity", () => {
+  const file = workflowFile("dragon", "languages");
+  assert.match(file, /^  workflow_dispatch:$/m);
+  assert.match(file, /^  schedule:\n    - cron: "37 0 \* \* \*" # just after midnight UTC/m);
+  assert.match(file, /^concurrency: critter$/m);
+  assert.match(file, /^          activity: true$/m);
+  assert.match(file, /^          critter: dragon\n          colour: languages\n$/m);
+  assert.ok(file.trimEnd().split("\n").slice(-2).join("\n").includes("colour: languages"), "swap lines stay last");
+});
+
 test("every critter's link stays well under what browsers and GitHub accept", () => {
   for (const critter of critters) {
-    for (const way of critter.colourways) {
-      const link = addLink("a-rather-long-github-username-of-39-char", "main", critter.id, way.id);
+    for (const way of ["languages", ...critter.colourways.map((w) => w.id)]) {
+      const link = addLink("a-rather-long-github-username-of-39-char", "main", critter.id, way);
       assert.ok(link.length < 2000, `${link.length} characters`);
     }
   }
