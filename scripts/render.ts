@@ -2,13 +2,14 @@
 //   npm run render -- dragon ember out.gif
 //   npm run render -- dragon ember out.gif stage=1 marks=2 mood=lively
 import { writeFileSync } from "node:fs";
+import { egg } from "../src/critters/egg.ts";
 import { critters, findCritter } from "../src/critters/index.ts";
 import { encodeGif } from "../src/engine/gif.ts";
 import { DEFAULT_TRAITS } from "../src/engine/traits.ts";
 import type { Mood, Traits } from "../src/engine/traits.ts";
 
 const [id = "dragon", colourway, out, ...options] = process.argv.slice(2);
-const critter = findCritter(id);
+const critter = id === "egg" ? egg : findCritter(id);
 if (!critter) {
   console.error(`Unknown critter "${id}". Choose from: ${critters.map((c) => c.id).join(", ")}`);
   process.exit(1);

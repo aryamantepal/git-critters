@@ -6,7 +6,10 @@ branding:
 
 inputs:
   critter:
-    description: Which critter to draw. One of dragon, axolotl, jellyfish or ghost.
+    description: >-
+      Which critter to draw. One of dragon, axolotl, jellyfish or ghost, or "surprise" to start
+      from an egg that hatches into a critter chosen from your username (needs activity, and
+      colour languages or none).
     required: true
   colour:
     description: >-
@@ -21,6 +24,11 @@ inputs:
     description: >-
       Draw the critter from your public GitHub activity and redraw it each night: size from
       lifetime contributions, marks from your longest streak this year, motion from yesterday.
+    default: "false"
+  egg:
+    description: >-
+      Start as an egg that hatches into the critter after 25 contributions since you added the
+      workflow. Needs activity.
     default: "false"
   login:
     description: Whose activity to draw from. Only used when activity is true.

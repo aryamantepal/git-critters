@@ -1,4 +1,6 @@
 import { languageColourway, LANGUAGES_COLOURWAY } from "../activity/colourway.ts";
+import { HATCH_AFTER } from "../activity/egg.ts";
+import { egg, FRESH_EGG } from "../critters/egg.ts";
 import { critters } from "../critters/index.ts";
 import { paletteOf, SCALE } from "../engine/critter.ts";
 import type { Colourway, Critter } from "../engine/critter.ts";
@@ -18,6 +20,9 @@ const critterList = element("critters");
 const colourList = element("colours");
 const colourNote = element("colour-note");
 const traitList = element("traits");
+const traitFieldset = element("try-the-rest");
+const eggToggle = element<HTMLInputElement>("egg");
+const eggNote = element("egg-note");
 const blurb = element("blurb");
 const usernameInput = element<HTMLInputElement>("username");
 const addButton = element<HTMLAnchorElement>("add");
@@ -34,6 +39,12 @@ const sampleReadme = element<HTMLTemplateElement>("sample-readme");
 
 const state = {
   critter: critters[0],
+  /** "Surprise me" is picked, so only the egg is shown, and nothing says what's inside. */
+  surprise: false,
+  /** Start from an egg. */
+  egg: true,
+  /** When set, the preview shows the egg at this crack level instead of the critter. */
+  eggView: null as 0 | 2 | null,
   /** Colours from the visitor's languages, which is the default, rather than a fixed colourway. */
   useLanguages: true,
   languages: [] as string[],
@@ -42,9 +53,21 @@ const state = {
 };
 const chosenWays = new Map<string, Colourway>(critters.map((c) => [c.id, c.colourways[0]]));
 
+/** Fixed colours belong to one species, so a surprise always uses languages, and so does the egg. */
+function usingLanguages(critter: Critter = state.critter): boolean {
+  return state.surprise || critter === egg || state.useLanguages;
+}
+
+/** What the preview is showing: the critter, or the egg when that's what's being looked at. */
+function shown(): { critter: Critter; traits: Traits } {
+  if (state.surprise) return { critter: egg, traits: FRESH_EGG };
+  if (state.eggView !== null) return { critter: egg, traits: { stage: state.eggView, marks: 0, mood: state.traits.mood } };
+  return { critter: state.critter, traits: state.traits };
+}
+
 /** The colours in use: the visitor's languages if they have any, else the critter's first colourway. */
 function wayFor(critter: Critter): Colourway {
-  if (!state.useLanguages) return chosenWays.get(critter.id)!;
+  if (!usingLanguages(critter)) return chosenWays.get(critter.id)!;
   return state.languages.length ? languageColourway(critter, state.languages) : critter.colourways[0];
 }
 
@@ -74,7 +97,9 @@ const player = {
   last: 0,
   playing: !matchMedia("(prefers-reduced-motion: reduce)").matches,
 
-  load(critter: Critter, way: Colourway, restart: boolean): void {
+  load(restart: boolean): void {
+    const { critter } = shown();
+    const way = wayFor(critter);
     if (stage.width !== critter.width || stage.height !== critter.height || !this.image) {
       stage.width = critter.width;
       stage.height = critter.height;
@@ -88,17 +113,18 @@ const player = {
   },
 
   draw(): void {
-    paint(this.context, this.image!, state.critter.frame(this.index, state.traits), this.lookup);
+    const { critter, traits } = shown();
+    paint(this.context, this.image!, critter.frame(this.index, traits), this.lookup);
   },
 
   tick(now: number): void {
-    const { delayMs } = state.critter;
+    const { delayMs, frames } = shown().critter;
     if (this.playing) {
       // A tab that was in the background shouldn't try to catch up.
       if (now - this.last > 1000) this.last = now;
       if (now - this.last >= delayMs) {
         while (now - this.last >= delayMs) {
-          this.index = (this.index + 1) % state.critter.frames;
+          this.index = (this.index + 1) % frames;
           this.last += delayMs;
         }
         this.draw();
@@ -109,9 +135,9 @@ const player = {
 };
 
 /** Draw a critter's poster frame, cropped close and scaled up by a whole number. */
-function drawThumbnail(canvas: HTMLCanvasElement, critter: Critter, way: Colourway): void {
+function drawThumbnail(canvas: HTMLCanvasElement, critter: Critter, way: Colourway, traits: Traits): void {
   const { width, height } = critter;
-  const pixels = critter.frame(critter.poster, state.traits);
+  const pixels = critter.frame(critter.poster, traits);
   let left = width;
   let right = 0;
   let top = height;
@@ -152,27 +178,36 @@ function drawThumbnail(canvas: HTMLCanvasElement, critter: Critter, way: Colourw
 
 const thumbnails = new Map<string, HTMLCanvasElement>();
 
+const SURPRISE_BLURB = "An egg that hatches into one of the critters. You find out which when it does.";
+
+function drawThumbnails(): void {
+  for (const critter of critters) drawThumbnail(thumbnails.get(critter.id)!, critter, wayFor(critter), state.traits);
+  drawThumbnail(thumbnails.get(egg.id)!, egg, wayFor(egg), FRESH_EGG);
+}
+
 function buildCritterList(): void {
-  for (const critter of critters) {
+  // The egg is the fifth tile, for "Surprise me".
+  for (const critter of [...critters, egg]) {
+    const isSurprise = critter === egg;
     const label = document.createElement("label");
-    label.className = "critter";
+    label.className = isSurprise ? "critter surprise" : "critter";
     const radio = document.createElement("input");
     radio.type = "radio";
     radio.name = "critter";
-    radio.value = critter.id;
-    radio.checked = critter === state.critter;
-    radio.addEventListener("change", () => choose(critter));
+    radio.value = isSurprise ? "surprise" : critter.id;
+    radio.checked = isSurprise ? state.surprise : !state.surprise && critter === state.critter;
+    radio.addEventListener("change", () => (isSurprise ? chooseSurprise() : choose(critter)));
     const canvas = document.createElement("canvas");
     canvas.width = 168;
     canvas.height = 128;
     canvas.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
-    name.textContent = critter.name;
+    name.textContent = isSurprise ? "Surprise me" : critter.name;
     label.append(radio, canvas, name);
     critterList.append(label);
     thumbnails.set(critter.id, canvas);
-    drawThumbnail(canvas, critter, wayFor(critter));
   }
+  drawThumbnails();
 }
 
 function buildColourList(): void {
@@ -180,8 +215,10 @@ function buildColourList(): void {
   const { critter } = state;
   const chosen = chosenWays.get(critter.id)!;
   const options: [string, Colourway, () => void][] = [
-    ["My languages", wayFor(critter), () => chooseColour(null)],
-    ...critter.colourways.map((way): [string, Colourway, () => void] => [way.name, way, () => chooseColour(way)]),
+    ["My languages", wayFor(state.surprise ? egg : critter), () => chooseColour(null)],
+    ...(state.surprise
+      ? []
+      : critter.colourways.map((way): [string, Colourway, () => void] => [way.name, way, () => chooseColour(way)])),
   ];
   options.forEach(([name, way, pick], n) => {
     const label = document.createElement("label");
@@ -190,7 +227,7 @@ function buildColourList(): void {
     radio.type = "radio";
     radio.name = "colour";
     radio.value = n === 0 ? LANGUAGES_COLOURWAY : way.id;
-    radio.checked = n === 0 ? state.useLanguages : !state.useLanguages && way.id === chosen.id;
+    radio.checked = n === 0 ? usingLanguages() : !usingLanguages() && way.id === chosen.id;
     radio.addEventListener("change", pick);
     const swatch = document.createElement("span");
     swatch.className = "swatch";
@@ -203,14 +240,15 @@ function buildColourList(): void {
 }
 
 function renderColourNote(): void {
-  if (!state.useLanguages) {
+  const whose = state.surprise ? "the egg's" : `${state.critter.name}'s`;
+  if (!usingLanguages()) {
     colourNote.textContent = "";
   } else if (state.languages.length) {
     colourNote.textContent = `Coloured from your most-used languages: ${state.languages.join(" and ")}.`;
   } else if (state.profile) {
-    colourNote.textContent = `No languages to colour from, so this shows ${state.critter.name}'s first colours.`;
+    colourNote.textContent = `No languages to colour from, so this shows ${whose} first colours.`;
   } else {
-    colourNote.textContent = `Enter your username to colour it from your languages. Until then this shows ${state.critter.name}'s first colours.`;
+    colourNote.textContent = `Enter your username to colour it from your languages. Until then this shows ${whose} first colours.`;
   }
 }
 
@@ -220,7 +258,20 @@ const TRAIT_ROWS = [
   { key: "mood", label: "Yesterday", options: ["Resting", "Steady", "Lively"] },
 ] as const;
 
+/** With the egg on, Size starts with the egg, so people can see it. The numbers are crack levels. */
+const EGG_VIEWS = [
+  { text: "Egg", level: 0 },
+  { text: "Cracking", level: 2 },
+] as const;
+
+interface TraitOption {
+  text: string;
+  checked: boolean;
+  pick: () => void;
+}
+
 function buildTraitList(): void {
+  traitList.replaceChildren();
   for (const row of TRAIT_ROWS) {
     const group = document.createElement("div");
     group.className = "trait-row";
@@ -232,24 +283,45 @@ function buildTraitList(): void {
     heading.textContent = row.label;
     const options = document.createElement("div");
     options.className = "colours";
-    row.options.forEach((text, n) => {
+    const choices: TraitOption[] = row.options.map((text, n) => {
       const value = row.key === "mood" ? text.toLowerCase() : n;
+      return {
+        text,
+        checked: state.traits[row.key] === value && (row.key !== "stage" || state.eggView === null),
+        pick() {
+          Object.assign(state.traits, { [row.key]: value });
+          if (row.key === "stage") state.eggView = null;
+        },
+      };
+    });
+    if (row.key === "stage" && state.egg) {
+      choices.unshift(
+        ...EGG_VIEWS.map(({ text, level }) => ({
+          text,
+          checked: state.eggView === level,
+          pick() {
+            state.eggView = level;
+          },
+        })),
+      );
+    }
+    for (const choice of choices) {
       const label = document.createElement("label");
       label.className = "colour plain";
       const radio = document.createElement("input");
       radio.type = "radio";
       radio.name = `trait-${row.key}`;
-      radio.checked = state.traits[row.key] === value;
+      radio.checked = choice.checked;
       radio.addEventListener("change", () => {
-        Object.assign(state.traits, { [row.key]: value });
-        player.load(state.critter, wayFor(state.critter), false);
-        critters.forEach((critter) => drawThumbnail(thumbnails.get(critter.id)!, critter, wayFor(critter)));
+        choice.pick();
+        player.load(false);
+        drawThumbnails();
       });
       const span = document.createElement("span");
-      span.textContent = text;
+      span.textContent = choice.text;
       label.append(radio, span);
       options.append(label);
-    });
+    }
     group.append(heading, options);
     traitList.append(group);
   }
@@ -258,7 +330,7 @@ function buildTraitList(): void {
 /** The colour that says the most about a colourway. */
 function swatchOf(way: Colourway): string {
   const colours = way.colours as Record<string, string>;
-  return colours.body ?? colours.bell ?? Object.values(colours)[2];
+  return colours.body ?? colours.shell ?? colours.bell ?? Object.values(colours)[2];
 }
 
 function applyAccent(way: Colourway): void {
@@ -270,32 +342,64 @@ function applyAccent(way: Colourway): void {
   document.documentElement.style.setProperty("--on-accent", light ? "#1a1208" : "#ffffff");
 }
 
-function choose(critter: Critter): void {
-  state.critter = critter;
-  const way = wayFor(critter);
-  blurb.textContent = critter.blurb;
+function renderEgg(): void {
+  eggToggle.checked = state.surprise || state.egg;
+  eggToggle.disabled = state.surprise;
+  eggNote.textContent =
+    `It hatches into your critter after ${HATCH_AFTER} contributions since you add it, and cracks as you get closer.` +
+    (state.surprise ? " Surprise me always starts from an egg." : "");
+}
+
+/** Show everything that depends on which critter is picked, or on whether the egg is on. */
+function renderPick(restart: boolean): void {
+  const { critter } = shown();
+  blurb.textContent = state.surprise ? SURPRISE_BLURB : state.critter.blurb;
+  traitFieldset.hidden = state.surprise;
   buildColourList();
   renderColourNote();
-  applyAccent(way);
-  player.load(critter, way, true);
+  renderEgg();
+  buildTraitList();
+  applyAccent(wayFor(critter));
+  player.load(restart);
   renderAction();
+}
+
+function choose(critter: Critter): void {
+  state.critter = critter;
+  state.surprise = false;
+  state.eggView = null;
+  renderPick(true);
+}
+
+function chooseSurprise(): void {
+  state.surprise = true;
+  state.eggView = null;
+  renderPick(true);
 }
 
 /** Pick a fixed colourway, or null for the visitor's languages. */
 function chooseColour(fixed: Colourway | null): void {
   state.useLanguages = fixed === null;
   if (fixed) chosenWays.set(state.critter.id, fixed);
-  const way = wayFor(state.critter);
-  applyAccent(way);
-  player.load(state.critter, way, false);
-  drawThumbnail(thumbnails.get(state.critter.id)!, state.critter, way);
+  applyAccent(wayFor(shown().critter));
+  player.load(false);
+  drawThumbnails();
   renderColourNote();
   renderAction();
 }
 
 /** The colour that goes in the workflow: "languages", or a fixed colourway's id. */
 function colourId(): string {
-  return state.useLanguages ? LANGUAGES_COLOURWAY : chosenWays.get(state.critter.id)!.id;
+  return usingLanguages() ? LANGUAGES_COLOURWAY : chosenWays.get(state.critter.id)!.id;
+}
+
+/** The value that goes in the workflow's critter line. A surprise never says what it is. */
+function critterId(): string {
+  return state.surprise ? "surprise" : state.critter.id;
+}
+
+function eggOn(): boolean {
+  return state.surprise || state.egg;
 }
 
 function setAdd(label: string, href: string | null): void {
@@ -307,8 +411,9 @@ function setAdd(label: string, href: string | null): void {
 
 /** Update the button and the status line to match the critter and whoever's looking. */
 function renderAction(): void {
-  const { profile, critter } = state;
+  const { profile } = state;
   const colour = colourId();
+  const critter = critterId();
   swapHelp.hidden = true;
   if (!profile) {
     setAdd("Add to my profile", null);
@@ -334,17 +439,17 @@ function renderAction(): void {
       if (profile.installed) {
         setAdd("Swap to this critter", editLink(profile.login, profile.branch));
         statusLine.textContent = "You already have a critter, so swapping it takes one small edit.";
-        swapLines.textContent = `activity: true\ncritter: ${critter.id}\ncolour: ${colour}`;
+        swapLines.textContent = `activity: true\n${eggOn() ? "egg: true\n" : ""}critter: ${critter}\ncolour: ${colour}`;
         swapHelp.hidden = false;
       } else {
-        setAdd("Add to my profile", addLink(profile.login, profile.branch, critter.id, colour));
+        setAdd("Add to my profile", addLink(profile.login, profile.branch, critter, colour, eggOn()));
         statusLine.textContent = profile.readmeHtml
           ? "That's your real README underneath."
           : "You don't have a README yet, so this will start one.";
       }
       break;
     case "unknown":
-      setAdd("Add to my profile", addLink(profile.login, "main", critter.id, colour));
+      setAdd("Add to my profile", addLink(profile.login, "main", critter, colour, eggOn()));
       statusLine.textContent = "GitHub isn't answering lookups from here right now, so this shows sample text. The button still works.";
       break;
   }
@@ -366,10 +471,9 @@ function showReadme(profile: Profile | null): void {
 function refreshColours(): void {
   buildColourList();
   renderColourNote();
-  const way = wayFor(state.critter);
-  applyAccent(way);
-  player.load(state.critter, way, false);
-  critters.forEach((critter) => drawThumbnail(thumbnails.get(critter.id)!, critter, wayFor(critter)));
+  applyAccent(wayFor(shown().critter));
+  player.load(false);
+  drawThumbnails();
 }
 
 let lookupNumber = 0;
@@ -426,7 +530,7 @@ copySwap.addEventListener("click", async () => {
 });
 
 downloadButton.addEventListener("click", () => {
-  const { critter, traits } = state;
+  const { critter, traits } = shown();
   const way = wayFor(critter);
   const blob = new Blob([encodeGif(critter, way, traits) as Uint8Array<ArrayBuffer>], { type: "image/gif" });
   const link = document.createElement("a");
@@ -454,8 +558,14 @@ pauseButton.addEventListener("click", () => {
   renderPause();
 });
 
+element("hatch-after").textContent = String(HATCH_AFTER);
+eggToggle.addEventListener("change", () => {
+  state.egg = eggToggle.checked;
+  if (!state.egg) state.eggView = null;
+  renderPick(false);
+});
+
 buildCritterList();
-buildTraitList();
 renderPause();
 showReadme(null);
 choose(state.critter);

@@ -5,7 +5,7 @@ import type { Flight } from "./motion.ts";
 export type Mood = "resting" | "steady" | "lively";
 
 export interface Traits {
-  /** Size: 0 hatchling to 3 elder. */
+  /** Size: 0 hatchling to 3 elder. For the egg it's the crack level: 0 none, 3 big cracks with light showing through. */
   stage: 0 | 1 | 2 | 3;
   /** How many marks the body carries, 0 to 3. */
   marks: 0 | 1 | 2 | 3;
