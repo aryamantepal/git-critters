@@ -569,6 +569,7 @@ export const dragon = defineCritter({
   bodyColour: "body",
   accentColours: ["wingHi", "wing", "wingLo", "wingFar", "wingFarLo", "fireOuter", "fireMid", "fireInner", "fireCore"],
   fixedColours: ["horn", "hornLo", "eye", "white"],
+  edgeColours: ["rim", "fireOuter", "fireMid"],
   colourways: [
     {
       id: "ember",

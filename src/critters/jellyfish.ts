@@ -287,6 +287,7 @@ export const jellyfish = defineCritter({
   bodyColour: "bell",
   accentColours: ["spot", "arm", "armLo", "tentacle", "tentacleLo", "mote"],
   fixedColours: ["eye", "white", "blush"],
+  edgeColours: ["rim", "tentacle", "tentacleLo", "mote"],
   colourways: [
     {
       id: "lagoon",

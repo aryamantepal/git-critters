@@ -3,26 +3,15 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { critters } from "../src/critters/index.ts";
 import { paletteOf, SCALE } from "../src/engine/critter.ts";
-import type { Critter } from "../src/engine/critter.ts";
 import { encodeGif } from "../src/engine/gif.ts";
 import { DEFAULT_TRAITS, traitsKey } from "../src/engine/traits.ts";
-import type { Mood, Traits } from "../src/engine/traits.ts";
+import type { Traits } from "../src/engine/traits.ts";
 import { decodeGif } from "./decode.ts";
 import type { DecodedGif } from "./decode.ts";
+import { assertEdgesShow, describeTraits, edgeColoursOf, EXTREMES } from "./shared.ts";
 
-const LIGHT = [255, 255, 255];
-const DARK = [0x0d, 0x11, 0x17];
 const MAX_BYTES = 1_000_000;
-const MIN_EDGE_CONTRAST = 2;
 
-// Not every combination of traits, just the ends of each range. The first colourway only.
-const EXTREMES: Traits[] = [];
-for (const stage of [0, 3] as const) {
-  for (const marks of [0, 3] as const) {
-    for (const mood of ["resting", "steady", "lively"] as Mood[]) EXTREMES.push({ stage, marks, mood });
-  }
-}
-const describeTraits = (t: Traits) => `stage ${t.stage}, ${t.marks} marks, ${t.mood}`;
 // Reading a GIF back is the slow part, so only these four are, along with the default.
 const READ_BACK = new Set(
   [
@@ -32,20 +21,6 @@ const READ_BACK = new Set(
     { stage: 3, marks: 0, mood: "resting" },
   ].map((t) => traitsKey(t as Traits)),
 );
-
-function luminance(r: number, g: number, b: number): number {
-  const linear = (v: number) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
-}
-
-function contrast(a: number[], b: number[]): number {
-  const la = luminance(a[0], a[1], a[2]);
-  const lb = luminance(b[0], b[1], b[2]);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
 
 function changedIndexes(a: Uint8Array, b: Uint8Array): number {
   let changed = 0;
@@ -64,39 +39,6 @@ function gifOf(critterId: string, wayId: string, traits: Traits = DEFAULT_TRAITS
     decoded.set(key, entry);
   }
   return entry;
-}
-
-/** The palette indexes that border empty space in any frame. */
-function edgeColoursOf(critter: Critter, traits: Traits): Set<number> {
-  const edgeColours = new Set<number>();
-  const { width, height } = critter;
-  for (let i = 0; i < critter.frames; i++) {
-    const pixels = critter.frame(i, traits);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const colour = pixels[y * width + x];
-        if (!colour) continue;
-        const touchesAir =
-          pixels[y * width + x - 1] === 0 ||
-          pixels[y * width + x + 1] === 0 ||
-          pixels[(y - 1) * width + x] === 0 ||
-          pixels[(y + 1) * width + x] === 0;
-        if (touchesAir) edgeColours.add(colour);
-      }
-    }
-  }
-  return edgeColours;
-}
-
-function assertEdgesShow(critter: Critter, palette: Uint8Array, traits: Traits): void {
-  for (const colour of edgeColoursOf(critter, traits)) {
-    const rgb = [palette[colour * 3], palette[colour * 3 + 1], palette[colour * 3 + 2]];
-    const name = critter.colourNames[colour - 1];
-    for (const page of [LIGHT, DARK]) {
-      const ratio = contrast(rgb, page);
-      assert.ok(ratio >= MIN_EDGE_CONTRAST, `${name} is only ${ratio.toFixed(2)}:1 against ${page}`);
-    }
-  }
 }
 
 test("ids are unique and usable in a workflow", () => {
@@ -210,7 +152,7 @@ for (const critter of critters) {
       });
 
       test(`the outline shows on GitHub's light and dark pages (${when})`, () => {
-        assertEdgesShow(critter, paletteOf(critter, way.id), traits);
+        assertEdgesShow(critter, paletteOf(critter, way.id), edgeColoursOf(critter, traits));
       });
     }
 
@@ -224,7 +166,7 @@ for (const critter of critters) {
 
     for (const colourway of critter.colourways) {
       test(`the ${colourway.name} outline shows on GitHub's light and dark pages`, () => {
-        assertEdgesShow(critter, paletteOf(critter, colourway.id), DEFAULT_TRAITS);
+        assertEdgesShow(critter, paletteOf(critter, colourway.id), edgeColoursOf(critter, DEFAULT_TRAITS));
       });
     }
   });

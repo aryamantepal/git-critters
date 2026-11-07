@@ -34,6 +34,11 @@ export interface CritterDefinition<Name extends string = string> {
   /** Colours that never change with a language: eyes, white, cheeks. */
   fixedColours: readonly Name[];
   /**
+   * Colours that reach the edge of the silhouette. GIF transparency is all or
+   * nothing, so these have to show on light and dark pages in every colourway.
+   */
+  edgeColours: readonly Name[];
+  /**
    * Draw one frame as palette indexes, width × height. The result must depend only
    * on the index and traits, and every motion must complete whole cycles over
    * `frames`, so the last frame flows into the first.

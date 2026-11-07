@@ -257,6 +257,7 @@ export const ghost = defineCritter({
   bodyColour: "body",
   accentColours: ["sparkle"],
   fixedColours: ["eye", "white", "blush"],
+  edgeColours: ["rim", "sparkle"],
   colourways: [
     {
       id: "moon",

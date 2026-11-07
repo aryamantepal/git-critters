@@ -392,6 +392,7 @@ export const axolotl = defineCritter({
   bodyColour: "body",
   accentColours: ["gill", "gillHi", "bubble"],
   fixedColours: ["eye", "white", "blush"],
+  edgeColours: ["rim", "gill", "gillHi", "bubble"],
   colourways: [
     {
       id: "blossom",
