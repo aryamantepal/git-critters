@@ -11,17 +11,21 @@ export function isValidUsername(name: string): boolean {
 
 /** The one small file someone commits to get a critter. */
 export function workflowFile(critter: string, colour: string): string {
-  return `# Draws a pixel-art critter and adds it to the top of this README.
-# To swap it, change the two lines at the bottom and commit: ${SITE_URL}
+  return `# Draws a pixel-art critter from your GitHub activity and adds it to the top of this README.
+# To swap it, change the last two lines and commit: ${SITE_URL}
 name: Critter
 
 on:
   push:
     paths: [${WORKFLOW_PATH}]
   workflow_dispatch:
+  schedule:
+    - cron: "37 0 * * *" # just after midnight UTC, when yesterday's activity is complete
 
 permissions:
   contents: write
+
+concurrency: critter
 
 jobs:
   critter:
@@ -30,6 +34,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ${ACTION}
         with:
+          activity: true
           critter: ${critter}
           colour: ${colour}
 `;

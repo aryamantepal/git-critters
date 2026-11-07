@@ -72,6 +72,37 @@ jobs:
           test "$(grep -c 'git-critters:start' README.md)" = 1
           grep -q 'of a dragon' README.md
 
+      - uses: ./
+        with:
+          critter: ghost
+          activity: true
+      - name: An activity run draws from the owner's real data, named for yesterday
+        run: |
+          git fetch --quiet origin "$BRANCH"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BRANCH")"
+          git log -1 --format=%s | grep -Eqx "critter: draw the ghost for [0-9]{4}-[0-9]{2}-[0-9]{2}"
+          head -c 6 critter.gif | grep -q GIF89a
+          test "$(grep -c 'git-critters:start' README.md)" = 1
+          grep -q 'of a friendly ghost' README.md
+          grep -q 'My existing text.' README.md
+          git rev-parse HEAD > before-activity
+
+      - uses: ./
+        with:
+          critter: ghost
+          activity: true
+      - name: Running the activity again changes nothing
+        run: test "$(git rev-parse HEAD)" = "$(cat before-activity)"
+
+      - name: colour languages without activity fails with a clear message
+        id: languages-off
+        continue-on-error: true
+        uses: ./
+        with:
+          critter: ghost
+          colour: languages
+      - run: test "${{ steps.languages-off.outcome }}" = failure
+
       - name: An unknown critter fails with a clear message
         id: unknown
         continue-on-error: true

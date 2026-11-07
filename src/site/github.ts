@@ -1,11 +1,13 @@
 // Reads public data straight from the visitor's browser, so there's no server or token.
+import { topLanguages } from "../activity/languages.ts";
+import type { RepoLanguage } from "../activity/languages.ts";
 import { WORKFLOW_PATH } from "./links.ts";
 
 export type Profile =
   | { kind: "missing" }
   | { kind: "organization"; login: string }
-  | { kind: "no-repo"; login: string }
-  | { kind: "ready"; login: string; branch: string; readmeHtml: string | null; installed: boolean }
+  | { kind: "no-repo"; login: string; languages: string[] }
+  | { kind: "ready"; login: string; branch: string; readmeHtml: string | null; installed: boolean; languages: string[] }
   /** GitHub's limit for anonymous lookups is used up, or the network failed. */
   | { kind: "unknown"; login: string };
 
@@ -21,7 +23,18 @@ function assertUsable(response: Response): void {
   if (!response.ok && response.status !== 404) throw new LookupFailed(String(response.status));
 }
 
+/** The same repo list the Action reads, so the preview and the real critter agree. A failure just means no languages. */
+async function lookUpLanguages(login: string): Promise<string[]> {
+  try {
+    const response = await get(`/users/${login}/repos?per_page=100&type=owner&sort=pushed`);
+    return response.ok ? topLanguages((await response.json()) as RepoLanguage[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function lookUpProfile(username: string): Promise<Profile> {
+  const languagesLookup = lookUpLanguages(username);
   try {
     const userResponse = await get(`/users/${username}`);
     if (userResponse.status === 404) return { kind: "missing" };
@@ -31,7 +44,7 @@ export async function lookUpProfile(username: string): Promise<Profile> {
     if (user.type === "Organization") return { kind: "organization", login };
 
     const repoResponse = await get(`/repos/${login}/${login}`);
-    if (repoResponse.status === 404) return { kind: "no-repo", login };
+    if (repoResponse.status === 404) return { kind: "no-repo", login, languages: await languagesLookup };
     assertUsable(repoResponse);
     const repo = (await repoResponse.json()) as { default_branch: string };
 
@@ -47,6 +60,7 @@ export async function lookUpProfile(username: string): Promise<Profile> {
       branch: repo.default_branch,
       readmeHtml: readmeResponse.ok ? await readmeResponse.text() : null,
       installed: workflowResponse.ok,
+      languages: await languagesLookup,
     };
   } catch {
     return { kind: "unknown", login: username };

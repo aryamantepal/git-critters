@@ -143,3 +143,37 @@ export function forEachSpark(
     }
   }
 }
+
+/** How far along a spine each of `count` bands sits. Small critters space them further apart in u, so they stay about as far apart in pixels. */
+export function bandPositions(from: number, gap: number, scale: number, count: number): number[] {
+  return Array.from({ length: count }, (_, n) => from + (n * gap) / scale);
+}
+
+/** Two-pixel stripes across the back of a body, `positions` of the way along its spine. */
+export function drawBands(
+  canvas: Canvas,
+  view: View,
+  spine: Spine,
+  positions: readonly number[],
+  body: Mask,
+  colour: number,
+): void {
+  const dx = gradient(spine.x);
+  const dy = gradient(spine.y);
+  const bands = canvas.mask();
+  for (const u of positions) {
+    const i = Math.trunc(u * (spine.x.length - 1));
+    const length = Math.hypot(dx[i], dy[i]);
+    const [nx, ny] = [dy[i] / length, -dx[i] / length];
+    const edge = (side: number) =>
+      project(
+        view,
+        spine.x[i] + nx * spine.radius[i] * side,
+        spine.y[i] + ny * spine.radius[i] * side,
+        spine.z[i],
+      );
+    const [[x0, y0], [x1, y1]] = [edge(-0.1), edge(1.4)];
+    bands.addLine([[x0, y0], [x1, y1]]).addLine([[x0 + 1, y0], [x1 + 1, y1]]);
+  }
+  canvas.fill(bands.and(body), colour);
+}

@@ -90,12 +90,12 @@ export interface Flight {
   vy: Float64Array;
 }
 
-/** Fly a closed path through `waypoints`, one sample per frame. */
-export function flightPath(waypoints: readonly Point[], frames: number): Flight {
+/** Fly a closed path through `waypoints`, one sample per frame, going round `laps` times. */
+export function flightPath(waypoints: readonly Point[], frames: number, laps = 1): Flight {
   const x = new Float64Array(frames);
   const y = new Float64Array(frames);
   for (let i = 0; i < frames; i++) {
-    [x[i], y[i]] = closedSpline(waypoints, i / frames);
+    [x[i], y[i]] = closedSpline(waypoints, ((laps * i) / frames) % 1);
   }
   const vx = new Float64Array(frames);
   const vy = new Float64Array(frames);

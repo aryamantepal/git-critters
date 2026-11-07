@@ -4,43 +4,37 @@ import { describe, test } from "node:test";
 import { critters } from "../src/critters/index.ts";
 import { paletteOf, SCALE } from "../src/engine/critter.ts";
 import { encodeGif } from "../src/engine/gif.ts";
+import { DEFAULT_TRAITS, traitsKey } from "../src/engine/traits.ts";
+import type { Traits } from "../src/engine/traits.ts";
 import { decodeGif } from "./decode.ts";
 import type { DecodedGif } from "./decode.ts";
+import { assertEdgesShow, describeTraits, edgeColoursOf, EXTREMES } from "./shared.ts";
 
-const LIGHT = [255, 255, 255];
-const DARK = [0x0d, 0x11, 0x17];
 const MAX_BYTES = 1_000_000;
-const MIN_EDGE_CONTRAST = 2;
 
-function luminance(r: number, g: number, b: number): number {
-  const linear = (v: number) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
-}
+// Reading a GIF back is the slow part, so only these four are, along with the default.
+const READ_BACK = new Set(
+  [
+    { stage: 0, marks: 3, mood: "resting" },
+    { stage: 0, marks: 0, mood: "lively" },
+    { stage: 3, marks: 3, mood: "lively" },
+    { stage: 3, marks: 0, mood: "resting" },
+  ].map((t) => traitsKey(t as Traits)),
+);
 
-function contrast(a: number[], b: number[]): number {
-  const la = luminance(a[0], a[1], a[2]);
-  const lb = luminance(b[0], b[1], b[2]);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-
-function changedPixels(a: Uint8Array, b: Uint8Array): number {
+function changedIndexes(a: Uint8Array, b: Uint8Array): number {
   let changed = 0;
-  for (let i = 0; i < a.length; i += 4) {
-    if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2] || a[i + 3] !== b[i + 3]) changed++;
-  }
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) changed++;
   return changed;
 }
 
 const decoded = new Map<string, { gif: DecodedGif; size: number }>();
-function gifOf(critterId: string, wayId: string) {
-  const key = `${critterId}/${wayId}`;
+function gifOf(critterId: string, wayId: string, traits: Traits = DEFAULT_TRAITS) {
+  const key = `${critterId}/${wayId}/${traitsKey(traits)}`;
   let entry = decoded.get(key);
   if (!entry) {
     const critter = critters.find((c) => c.id === critterId)!;
-    const bytes = encodeGif(critter, wayId);
+    const bytes = encodeGif(critter, wayId, traits);
     entry = { gif: decodeGif(bytes), size: bytes.length };
     decoded.set(key, entry);
   }
@@ -89,89 +83,90 @@ for (const critter of critters) {
 
     const way = critter.colourways[0];
 
-    test("saves every frame, looping forever at a steady rate", () => {
-      const { gif } = gifOf(critter.id, way.id);
-      assert.equal(gif.frames.length, critter.frames);
-      assert.ok(gif.loops);
-      assert.equal(gif.width, critter.width * SCALE);
-      assert.equal(gif.height, critter.height * SCALE);
-      assert.ok(gif.frames.every((f) => f.delayMs === critter.delayMs && f.disposal === 2));
-    });
+    for (const traits of EXTREMES) {
+      const when = describeTraits(traits);
+      const isDefault = traitsKey(traits) === traitsKey(DEFAULT_TRAITS);
+      const readBack = isDefault || READ_BACK.has(traitsKey(traits));
 
-    test("the saved file holds exactly what was drawn, so nothing trails behind", () => {
-      const { gif } = gifOf(critter.id, way.id);
-      const palette = paletteOf(critter, way.id);
-      gif.frames.forEach((frame, index) => {
-        const pixels = critter.frame(index);
-        for (let y = 0; y < gif.height; y++) {
-          for (let x = 0; x < gif.width; x++) {
-            const colour = pixels[Math.floor(y / SCALE) * critter.width + Math.floor(x / SCALE)];
-            const at = (y * gif.width + x) * 4;
-            if (colour === 0) {
-              assert.equal(frame.rgba[at + 3], 0, `frame ${index} has a stray pixel at ${x},${y}`);
-            } else {
-              assert.equal(frame.rgba[at + 3], 255, `frame ${index} is missing a pixel at ${x},${y}`);
-              assert.equal(frame.rgba[at], palette[colour * 3]);
-              assert.equal(frame.rgba[at + 1], palette[colour * 3 + 1]);
-              assert.equal(frame.rgba[at + 2], palette[colour * 3 + 2]);
+      test(`is small enough to load quickly (${when})`, () => {
+        const size = encodeGif(critter, way.id, traits).length;
+        assert.ok(size < MAX_BYTES, `${size} bytes`);
+      });
+
+      if (readBack) {
+        test(`saves every frame, looping forever at a steady rate (${when})`, () => {
+          const { gif } = gifOf(critter.id, way.id, traits);
+          assert.equal(gif.frames.length, critter.frames);
+          assert.ok(gif.loops);
+          assert.equal(gif.width, critter.width * SCALE);
+          assert.equal(gif.height, critter.height * SCALE);
+          assert.ok(gif.frames.every((f) => f.delayMs === critter.delayMs && f.disposal === 2));
+        });
+
+        test(`the saved file holds exactly what was drawn, so nothing trails behind (${when})`, () => {
+          const { gif } = gifOf(critter.id, way.id, traits);
+          const palette = paletteOf(critter, way.id);
+          // Every frame of the default GIF, and every fifth of the others.
+          for (let index = 0; index < gif.frames.length; index += isDefault ? 1 : 5) {
+            const frame = gif.frames[index];
+            const pixels = critter.frame(index, traits);
+            for (let y = 0; y < gif.height; y++) {
+              for (let x = 0; x < gif.width; x++) {
+                const colour = pixels[Math.floor(y / SCALE) * critter.width + Math.floor(x / SCALE)];
+                const at = (y * gif.width + x) * 4;
+                if (colour === 0) {
+                  assert.equal(frame.rgba[at + 3], 0, `frame ${index} has a stray pixel at ${x},${y}`);
+                } else {
+                  assert.equal(frame.rgba[at + 3], 255, `frame ${index} is missing a pixel at ${x},${y}`);
+                  assert.equal(frame.rgba[at], palette[colour * 3]);
+                  assert.equal(frame.rgba[at + 1], palette[colour * 3 + 1]);
+                  assert.equal(frame.rgba[at + 2], palette[colour * 3 + 2]);
+                }
+              }
             }
+          }
+        });
+      }
+
+      test(`it's always moving, and the loop has no visible jump (${when})`, () => {
+        const changes = Array.from({ length: critter.frames }, (_, i) =>
+          changedIndexes(critter.frame(i, traits), critter.frame(i + 1, traits)),
+        );
+        assert.ok(Math.min(...changes) > 0, "two frames in a row are identical");
+        const seam = changes[changes.length - 1];
+        assert.ok(seam <= Math.max(...changes.slice(0, -1)), `the seam changes ${seam} pixels`);
+      });
+
+      test(`stays inside the frame (${when})`, () => {
+        for (let i = 0; i < critter.frames; i++) {
+          const pixels = critter.frame(i, traits);
+          for (let x = 0; x < critter.width; x++) {
+            assert.equal(pixels[x], 0, `frame ${i} touches the top`);
+            assert.equal(pixels[(critter.height - 1) * critter.width + x], 0, `frame ${i} touches the bottom`);
+          }
+          for (let y = 0; y < critter.height; y++) {
+            assert.equal(pixels[y * critter.width], 0, `frame ${i} touches the left`);
+            assert.equal(pixels[y * critter.width + critter.width - 1], 0, `frame ${i} touches the right`);
           }
         }
       });
-    });
 
-    test("it's always moving, and the loop has no visible jump", () => {
-      const { gif } = gifOf(critter.id, way.id);
-      const changes = gif.frames.map((frame, i) =>
-        changedPixels(frame.rgba, gif.frames[(i + 1) % gif.frames.length].rgba),
-      );
-      assert.ok(Math.min(...changes) > 0, "two frames in a row are identical");
-      const seam = changes[changes.length - 1];
-      assert.ok(seam <= Math.max(...changes.slice(0, -1)), `the seam changes ${seam} pixels`);
-    });
+      test(`the outline shows on GitHub's light and dark pages (${when})`, () => {
+        assertEdgesShow(critter, paletteOf(critter, way.id), edgeColoursOf(critter, traits));
+      });
+    }
 
-    test("stays inside the frame", () => {
-      for (let i = 0; i < critter.frames; i++) {
-        const pixels = critter.frame(i);
-        for (let x = 0; x < critter.width; x++) {
-          assert.equal(pixels[x], 0, `frame ${i} touches the top`);
-          assert.equal(pixels[(critter.height - 1) * critter.width + x], 0, `frame ${i} touches the bottom`);
-        }
-        for (let y = 0; y < critter.height; y++) {
-          assert.equal(pixels[y * critter.width], 0, `frame ${i} touches the left`);
-          assert.equal(pixels[y * critter.width + critter.width - 1], 0, `frame ${i} touches the right`);
-        }
-      }
+    test("draws the same frame for the same traits, whatever was drawn in between", () => {
+      const [a, b] = [EXTREMES[0], EXTREMES[EXTREMES.length - 1]];
+      const first = critter.frame(9, a).slice();
+      critter.frame(9, b);
+      assert.deepEqual(critter.frame(9, a), first);
+      assert.deepEqual(critter.draw(9, a), first);
     });
 
     for (const colourway of critter.colourways) {
       test(`the ${colourway.name} outline shows on GitHub's light and dark pages`, () => {
-        const palette = paletteOf(critter, colourway.id);
-        const edgeColours = new Set<number>();
-        for (let i = 0; i < critter.frames; i++) {
-          const pixels = critter.frame(i);
-          const { width, height } = critter;
-          for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-              const colour = pixels[y * width + x];
-              if (!colour) continue;
-              const touchesAir =
-                pixels[y * width + x - 1] === 0 ||
-                pixels[y * width + x + 1] === 0 ||
-                pixels[(y - 1) * width + x] === 0 ||
-                pixels[(y + 1) * width + x] === 0;
-              if (touchesAir) edgeColours.add(colour);
-            }
-          }
-        }
-        for (const colour of edgeColours) {
-          const rgb = [palette[colour * 3], palette[colour * 3 + 1], palette[colour * 3 + 2]];
-          const name = critter.colourNames[colour - 1];
-          for (const page of [LIGHT, DARK]) {
-            const ratio = contrast(rgb, page);
-            assert.ok(ratio >= MIN_EDGE_CONTRAST, `${name} is only ${ratio.toFixed(2)}:1 against ${page}`);
-          }
-        }
+        assertEdgesShow(critter, paletteOf(critter, colourway.id), edgeColoursOf(critter, DEFAULT_TRAITS));
       });
     }
   });

@@ -9,11 +9,25 @@ inputs:
     description: Which critter to draw. One of dragon, axolotl, jellyfish or ghost.
     required: true
   colour:
-    description: Which colourway to use. Leave this out for the critter's first one.
+    description: >-
+      Which colourway to use, or "languages" to colour it from your most-used languages
+      (needs activity). Leave this out for the critter's first colourway, or for languages
+      when activity is on.
     default: ""
   output:
     description: Where to save the GIF, relative to the repository's root.
     default: critter.gif
+  activity:
+    description: >-
+      Draw the critter from your public GitHub activity and redraw it each night: size from
+      lifetime contributions, marks from your longest streak this year, motion from yesterday.
+    default: "false"
+  login:
+    description: Whose activity to draw from. Only used when activity is true.
+    default: ${{ github.repository_owner }}
+  token:
+    description: The token used to read contributions and repositories. Only used when activity is true.
+    default: ${{ github.token }}
 
 runs:
   using: node24
