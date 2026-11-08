@@ -31,6 +31,9 @@ const HASHES: Record<string, string> = {
   "frog/meadow": "a129d3f5aed0de030f298e2af9c62aeab3831df40f00493f09653cbe494616ed",
   "frog/cobalt": "fff5268caaa9187c5852a683f22f93a87d48f7642123ebf5b42a7c0049da6e5c",
   "frog/tomato": "6a15a0230b225daded370155c74c6a820d5a53963ba9cc6f8e75817db4836055",
+  "mushroom/umber": "4957617c27eb2ebf37221f5ddd1fb604cb66febdbc5a3372ba67eb24d973c3bf",
+  "mushroom/glowcap": "cf83dcdf98c6afedfca49ac795a9be6d8b15bd8f8b98f149cb32d7f60a1896a1",
+  "mushroom/amethyst": "c48f433d5f604bb38d5fc482753811276eb76f3ae1d676d7e3c782ef45941f59",
 };
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
