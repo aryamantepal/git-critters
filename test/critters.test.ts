@@ -1,6 +1,6 @@
 // Every critter and colourway has to pass these, so adding one is mostly art.
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { after, describe, test } from "node:test";
 import { egg } from "../src/critters/egg.ts";
 import { critters } from "../src/critters/index.ts";
 import { paletteOf, SCALE } from "../src/engine/critter.ts";
@@ -54,6 +54,9 @@ test("ids are unique and usable in a workflow", () => {
 // The egg isn't a species, but it has to pass the same checks, at every crack level.
 for (const critter of [...critters, egg]) {
   describe(critter.name, () => {
+    // A decoded GIF is about 276 MB, so let go of this critter's before the next one's.
+    after(() => decoded.clear());
+
     test("draws the same frame every time, in any order", () => {
       for (const i of [0, Math.floor(critter.frames / 2), critter.frames - 1]) {
         const first = critter.draw(i);

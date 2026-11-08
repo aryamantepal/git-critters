@@ -1,5 +1,6 @@
 import type { Critter } from "../engine/critter.ts";
 import { axolotl } from "./axolotl.ts";
+import { bat } from "./bat.ts";
 import { cat } from "./cat.ts";
 import { dragon } from "./dragon.ts";
 import { frog } from "./frog.ts";
@@ -10,7 +11,7 @@ import { robot } from "./robot.ts";
 import { turtle } from "./turtle.ts";
 
 /** Every critter people can pick. To add one, write its file and list it here. */
-export const critters: readonly Critter[] = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle];
+export const critters: readonly Critter[] = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat];
 
 export function findCritter(id: string): Critter | undefined {
   return critters.find((critter) => critter.id === id);
