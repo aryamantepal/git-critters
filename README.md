@@ -84,6 +84,7 @@ jobs:
 | `axolotl` | `blossom`, `gold`, `dusk` |
 | `jellyfish` | `lagoon`, `orchid`, `coral` |
 | `ghost` | `moon`, `mint`, `peach` |
+| `frog` | `meadow`, `cobalt`, `tomato` |
 
 `colour: languages` colours the critter from your languages, and is what you get if you leave `colour` out while `activity` is on. A colour from the table always wins over languages, and size, marks and motion still apply.
 
