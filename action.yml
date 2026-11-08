@@ -7,7 +7,7 @@ branding:
 inputs:
   critter:
     description: >-
-      Which critter to draw. One of dragon, axolotl, jellyfish or ghost, or "surprise" to start
+      Which critter to draw. One of dragon, axolotl, jellyfish, ghost or bat, or "surprise" to start
       from an egg that hatches into a critter chosen from your username (needs activity, and
       colour languages or none).
     required: true

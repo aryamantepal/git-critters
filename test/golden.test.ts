@@ -22,6 +22,9 @@ const HASHES: Record<string, string> = {
   "ghost/moon": "7049a2fe84fae6977748be7934dcc79c0e2d679df30ea5a30eb04e95de577c39",
   "ghost/mint": "4cfa190d4cc56cacbdae96a815850e52cb575874aee875656deb12d0e40318c8",
   "ghost/peach": "cb7d5fe3570e0fb54ad63c861d1e05696719a6f3f455b715fd926429940590c9",
+  "bat/dusk": "87963fa6c07353d769d7d32e6ea30008f0f8083d97c73966846d421b003b8d29",
+  "bat/cocoa": "6ea2a1cafcc8e25c8124bc7e4b82857f46acca0b97bb4e432bc42f06a95fc789",
+  "bat/mist": "d1587629cfa63f5e818e87488455cbb3f53029229966c648a3250b4f9288704d",
 };
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
