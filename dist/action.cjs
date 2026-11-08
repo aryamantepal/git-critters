@@ -791,9 +791,9 @@ function draw(index, traits) {
     }
   }
   const sprite = new Canvas(LOCAL_WIDTH, LOCAL_HEIGHT);
-  const solid = sprite.mask();
-  rocked.pixels.forEach((colour, i) => solid.bits[i] = colour ? 1 : 0);
-  sprite.fill(solid.grown(), C.rim);
+  const solid2 = sprite.mask();
+  rocked.pixels.forEach((colour, i) => solid2.bits[i] = colour ? 1 : 0);
+  sprite.fill(solid2.grown(), C.rim);
   rocked.pixels.forEach((colour, i) => {
     if (colour) sprite.pixels[i] = colour;
   });
@@ -1217,7 +1217,7 @@ function renderSprite(pose, traits) {
   }
   parts.push([12, () => drawHead(canvas, pose, joint)]);
   parts.sort((a, b) => a[0] - b[0]);
-  for (const [, draw7] of parts) draw7();
+  for (const [, draw12] of parts) draw12();
   canvas.strengthenEdges([[C2.line, C2.rim]]);
   return canvas;
 }
@@ -1228,7 +1228,7 @@ function spriteOffset(pose, k) {
 var prepare = perTraits((traits) => {
   const k = STAGE_SCALE[traits.stage];
   const poses = buildPoses(traits);
-  const bubbles = makeSparks(
+  const bubbles2 = makeSparks(
     BUBBLES,
     FRAMES2,
     (birth) => {
@@ -1239,12 +1239,12 @@ var prepare = perTraits((traits) => {
     },
     { life: [22, 44], vx: [-0.12, 0.12], vy: [-0.55, -0.3] }
   );
-  return { poses, bubbles };
+  return { poses, bubbles: bubbles2 };
 });
 function draw2(index, traits) {
-  const { poses, bubbles } = prepare(traits);
+  const { poses, bubbles: bubbles2 } = prepare(traits);
   const frame = new Canvas(WIDTH2, HEIGHT2);
-  forEachSpark(bubbles, index, FRAMES2, (x, y, age) => {
+  forEachSpark(bubbles2, index, FRAMES2, (x, y, age) => {
     const inFrame = (px, py) => px >= MARGIN2 && px < WIDTH2 - MARGIN2 && py >= MARGIN2 && py < HEIGHT2 - MARGIN2;
     const dots = age < 0.45 ? [[x, y]] : [
       [x - 1, y],
@@ -1453,11 +1453,11 @@ function buildPoses2({ mood, stage }) {
 }
 function makePlace(pose, k) {
   const pivot = FEET * k;
-  const squash = Math.cos(Math.PI * pose.hang);
+  const squash2 = Math.cos(Math.PI * pose.hang);
   const cos = Math.cos(pose.swing);
   const sin = Math.sin(pose.swing);
   return (x, y, dx = 0, dy = 0) => {
-    const down = (y * k + dy - pivot) * squash;
+    const down = (y * k + dy - pivot) * squash2;
     const across = x * k + dx;
     return [ORIGIN2 + across * cos - down * sin, ORIGIN2 + pivot + across * sin + down * cos];
   };
@@ -1730,17 +1730,476 @@ var bat = defineCritter({
   draw: draw3
 });
 
-// src/critters/dragon.ts
+// src/critters/cat.ts
 var WIDTH4 = 180;
 var HEIGHT4 = 120;
 var FRAMES4 = 200;
 var MARGIN4 = 2;
+var LOCAL3 = 90;
+var ORIGIN_X = LOCAL3 / 2;
+var ORIGIN_Y = 76;
+var FLOOR2 = [WIDTH4 / 2, 96];
+var BREATHS = 5;
+var FLICKS = 3;
+var SLOW_START = 92;
+var SLOW_END = 158;
+var SLOW_RAMP = 16;
+var HEARTS = [
+  { start: SLOW_START + 18, side: 1 },
+  { start: SLOW_START + 34, side: -1 }
+];
+var HEART_LIFE = 48;
+var HEART_RISE = 26;
+var TWITCHES = [34, 176];
+var TAIL_SAMPLES = 40;
+var MARKS2 = [
+  [],
+  [[0, 5]],
+  [
+    [-3, 4],
+    [3, 4]
+  ],
+  [
+    [-5, 3],
+    [0, 5],
+    [5, 3]
+  ]
+];
+var EYE_WIDTH = [3, 3, 5, 5];
+var EYE_HEIGHT = [3, 4, 4, 5];
+var EYE_GAP = [4, 4, 5, 6];
+var COLOUR_NAMES4 = [
+  "rim",
+  "line",
+  "body",
+  "bodyHi",
+  "bodyLo",
+  "bib",
+  "earIn",
+  "iris",
+  "eye",
+  "lid",
+  "white",
+  "nose",
+  "ribbon",
+  "bell",
+  "heart",
+  "wing"
+];
+var C4 = colourIndexes(COLOUR_NAMES4);
+var TAIL = [
+  [11, 5],
+  [22, 5],
+  [31, 10],
+  [32, 18],
+  [28, 24],
+  [23, 25]
+];
+var TAIL_WEIGHT2 = [0, 0.1, 0.3, 0.55, 0.8, 1];
+var RINGS = [0.46, 0.64, 0.82];
+var HEART_ART = [".X.X.", "XXXXX", ".XXX.", "..X.."];
+var BUTTERFLY_PATH = [
+  [36, 62],
+  [46, 24],
+  [90, 16],
+  [134, 26],
+  [146, 62],
+  [134, 100],
+  [96, 106],
+  [50, 98]
+];
+var FLAP = [
+  ["ww.b.ww", "wwwbwww", "wwwbwww", ".w.b.w."],
+  [".w.b.w.", "wwwbwww", ".wwbww.", "..wbw.."],
+  ["..wbw..", "..wbw..", "..wbw..", "...b..."],
+  [".w.b.w.", "wwwbwww", ".wwbww.", "..wbw.."]
+];
+var LOOK_FROM = 20;
+function butterflyPath(mood) {
+  if (mood !== "resting") return roam(BUTTERFLY_PATH, mood, FRAMES4);
+  return flightPath(
+    BUTTERFLY_PATH.map(([x, y]) => [34 + (x - 90) * 0.2, 44 + (y - 60) * 0.2]),
+    FRAMES4
+  );
+}
+function buildPoses3({ mood }) {
+  const blinks = blinkFrames(mood, [24, 60, 188], FRAMES4);
+  const breaths = cyclesFor(mood, BREATHS);
+  const flicks = cyclesFor(mood, FLICKS);
+  const { x, y } = butterflyPath(mood);
+  const gaze = smooth(x, 13);
+  return Array.from({ length: FRAMES4 }, (_, i) => {
+    const edge = Math.min(i - SLOW_START, SLOW_END - i);
+    const twitch = Math.max(0, ...TWITCHES.map((at) => 1 - Math.abs(i - at) / 5));
+    return {
+      breath: Math.sin(TAU * breaths * i / FRAMES4) > 0.2 ? 1 : 0,
+      tail: TAU * flicks * i / FRAMES4,
+      slow: i >= SLOW_START && i <= SLOW_END ? clamp(edge / SLOW_RAMP, 0, 1) : 0,
+      twitch,
+      blink: blinks.has(i),
+      fly: [x[i], y[i]],
+      flap: i % FLAP.length,
+      look: Math.abs(gaze[i] - FLOOR2[0]) < LOOK_FROM ? 0 : Math.sign(gaze[i] - FLOOR2[0])
+    };
+  });
+}
+function ellipse2(mask, cx, cy, rx, ry) {
+  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
+    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+      if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) mask.addPixel(x, y);
+    }
+  }
+  return mask;
+}
+function box(mask, x0, y0, x1, y1) {
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) mask.addPixel(x, y);
+  return mask;
+}
+function solid(canvas, shape, colour) {
+  canvas.sticker(shape, colour, C4.line);
+  canvas.fill(shape.minus(shape.moved(-2, -2)), C4.bodyLo);
+  canvas.fill(shape.minus(shape.moved(1, 2)), C4.bodyHi);
+}
+function drawTail(canvas, pose, k, joy) {
+  const rows = TAIL.map(([x, y], i) => {
+    const w = TAIL_WEIGHT2[i];
+    const wave = Math.sin(pose.tail - 1.1 * i) + 0.5 * Math.sin(2 * pose.tail - 1.9 * i + 1);
+    return [(x + w * (4 * wave - 5 * joy)) * k, (y + w * (2.5 * Math.cos(pose.tail - 1.1 * i) + 1 * joy)) * k];
+  });
+  const [xs, ys] = openSpline(rows, TAIL_SAMPLES);
+  const tail = canvas.mask();
+  const spots = [];
+  for (let s = 0; s < TAIL_SAMPLES; s++) {
+    const u = s / (TAIL_SAMPLES - 1);
+    const px = ORIGIN_X + xs[s];
+    const py = ORIGIN_Y - ys[s];
+    spots.push([px, py]);
+    tail.addDisc(px, py, (3.1 - 0.9 * u) * k);
+  }
+  canvas.sticker(tail, C4.body, C4.line);
+  canvas.fill(tail.minus(tail.moved(-1, -1)), C4.bodyLo);
+  const rings = canvas.mask();
+  for (const u of RINGS) {
+    const at = Math.round(u * (TAIL_SAMPLES - 1));
+    const [x0, y0] = spots[at - 1];
+    const [x1, y1] = spots[at + 1];
+    const length = Math.hypot(x1 - x0, y1 - y0) || 1;
+    const [nx, ny] = [-(y1 - y0) / length, (x1 - x0) / length];
+    const [cx, cy] = spots[at];
+    const reach = 3.6 * k;
+    rings.addLine([
+      [cx - nx * reach, cy - ny * reach],
+      [cx + nx * reach, cy + ny * reach]
+    ]);
+  }
+  canvas.fill(rings.and(tail), C4.bodyLo);
+}
+function drawBody3(canvas, k) {
+  const at = (x, y) => [ORIGIN_X + x * k, ORIGIN_Y - y * k];
+  const floor = ORIGIN_Y;
+  const belowFloor = () => box(canvas.mask(), 0, floor + 1, LOCAL3 - 1, LOCAL3 - 1);
+  const torso = canvas.mask();
+  ellipse2(torso, ...at(0, 14), 15 * k, 17 * k);
+  for (const side of [-1, 1]) ellipse2(torso, ...at(side * 12, 9), 9.5 * k, 9.5 * k);
+  const lower = torso.minus(belowFloor());
+  solid(canvas, lower, C4.body);
+  const bib = canvas.mask().addPolygon([at(-6, 29), at(6, 29), at(8, 14), at(0, 8), at(-8, 14)]);
+  canvas.fill(bib.and(lower), C4.bib);
+  const stripes = canvas.mask();
+  for (const side of [-1, 1]) {
+    for (const [y, length] of [
+      [18, 4],
+      [13, 5],
+      [8, 4]
+    ]) {
+      const x = ORIGIN_X + round(side * 13 * k);
+      const row = ORIGIN_Y - round(y * k);
+      for (let n = 0; n < round(length * k); n++) stripes.addPixel(x + side * n * -1, row);
+    }
+  }
+  canvas.fill(stripes.and(lower), C4.bodyLo);
+  for (const side of [-1, 1]) {
+    const cx = ORIGIN_X + side * round(5.5 * k);
+    const column = box(canvas.mask(), cx - 2, floor - round(19 * k), cx + 2, floor);
+    const leg = ellipse2(column, cx + side * 0.4, floor - 1.2 * k - 0.6, 3.2 * k + 1.4, 2.2 * k + 1).minus(belowFloor());
+    canvas.sticker(leg, C4.body, C4.line);
+    const sock = leg.and(box(canvas.mask(), 0, floor - round(5 * k), LOCAL3 - 1, floor));
+    canvas.fill(sock, C4.bib);
+    canvas.fill(leg.minus(leg.moved(-1, -1)).minus(sock), C4.bodyLo);
+    canvas.fill(leg.minus(leg.moved(1, 1)).minus(sock), C4.bodyHi);
+    if (k > 0.6) {
+      const toe = cx - (side > 0 ? 1 : 0);
+      canvas.fill(canvas.mask().addPixel(toe, floor - 1).addPixel(toe, floor - 2).addPixel(toe + 2, floor - 1), C4.line);
+    }
+  }
+}
+function drawCollar(canvas, k) {
+  const top = ORIGIN_Y - round(26 * k);
+  const thickness = Math.max(1, round(2.6 * k));
+  const half = round(8 * k);
+  const body = canvas.mask();
+  for (let i = 0; i < canvas.pixels.length; i++) body.bits[i] = canvas.pixels[i] ? 1 : 0;
+  canvas.fill(box(canvas.mask(), ORIGIN_X - half, top, ORIGIN_X + half, top + thickness - 1).and(body), C4.ribbon);
+  const size = k < 0.6 ? 1 : 2;
+  canvas.fill(box(canvas.mask(), ORIGIN_X + 1 - size, top + thickness, ORIGIN_X, top + thickness + size - 1), C4.bell);
+}
+function drawHead2(canvas, pose, traits, k) {
+  const { stage, marks } = traits;
+  const lift = pose.breath;
+  const cx = ORIGIN_X + (pose.slow > 0.5 ? 1 : 0);
+  const cy = ORIGIN_Y - round(38 * k) - lift;
+  const rx = 17 * k;
+  const ry = 12.5 * k;
+  const head = canvas.mask();
+  ellipse2(head, cx, cy, rx, ry);
+  const ears = canvas.mask();
+  const inner = canvas.mask();
+  const back = pose.slow * 1.5 * k;
+  for (const side of [-1, 1]) {
+    const jump = side > 0 ? pose.twitch : 0;
+    const tipX = side * (14.5 - jump * 2) * k + side * back * 0.3;
+    const tipY = (22 - jump * 3.5 - back) * k;
+    ears.addPolygon([
+      [cx + side * 16.5 * k, cy + 4 * k],
+      [cx + tipX, cy - tipY],
+      [cx + side * 3 * k, cy - 11 * k]
+    ]);
+    inner.addPolygon([
+      [cx + side * 13.5 * k, cy - 2 * k],
+      [cx + tipX * 0.9, cy - (tipY - 4.5 * k)],
+      [cx + side * 7 * k, cy - 9.5 * k]
+    ]);
+  }
+  const shape = canvas.mask().add(head).add(ears);
+  solid(canvas, shape, C4.body);
+  canvas.fill(inner.and(shape), C4.earIn);
+  const muzzle = ellipse2(canvas.mask(), cx, cy + 4.6 * k + 0.6, 5.8 * k + 0.4, 3.6 * k + 0.4);
+  canvas.fill(muzzle.and(head), C4.bib);
+  const brow = canvas.mask();
+  for (const [across, length2] of MARKS2[marks]) {
+    const x = cx + round(across * k);
+    for (let n = 0; n < Math.max(2, round(length2 * k)); n++) brow.addPixel(x, cy - round(ry) + 1 + n);
+  }
+  canvas.fill(brow.and(head), C4.bodyLo);
+  drawEyes(canvas, pose, cx, cy, stage);
+  const nose = canvas.mask();
+  const noseY = cy + (stage < 2 ? 2 : 3);
+  nose.addPixel(cx - 1, noseY).addPixel(cx, noseY).addPixel(cx + 1, noseY).addPixel(cx, noseY + 1);
+  canvas.fill(nose, C4.nose);
+  const mouth = canvas.mask();
+  const mouthY = noseY + 2;
+  if (pose.slow > 0.5) {
+    mouth.addPixel(cx - 3, mouthY - 1).addPixel(cx - 2, mouthY).addPixel(cx - 1, mouthY).addPixel(cx, mouthY - 1);
+    mouth.addPixel(cx + 1, mouthY).addPixel(cx + 2, mouthY).addPixel(cx + 3, mouthY - 1);
+  } else {
+    mouth.addPixel(cx, mouthY - 1).addPixel(cx - 1, mouthY).addPixel(cx + 1, mouthY);
+    if (stage > 1) mouth.addPixel(cx - 2, mouthY - 1).addPixel(cx + 2, mouthY - 1);
+  }
+  canvas.fill(mouth.and(head), C4.line);
+  const whiskers = canvas.mask();
+  const lifted = pose.slow > 0.5 ? 1 : 0;
+  const inset = round(rx) - 2;
+  const length = 4 + round(5 * k);
+  for (const side of [-1, 1]) {
+    const x0 = cx + side * inset;
+    const x1 = cx + side * (round(rx) + length);
+    for (const [dy, tilt] of [
+      [1, -2],
+      [4, 1],
+      [7, 4]
+    ]) {
+      const y0 = cy + round((dy - 1) * k) + 1;
+      whiskers.addLine([
+        [x0, y0],
+        [x1, y0 + round(tilt * k) - lifted]
+      ]);
+    }
+  }
+  canvas.fill(whiskers.minus(head), C4.line);
+}
+function drawEyes(canvas, pose, cx, cy, stage) {
+  const w = EYE_WIDTH[stage];
+  const h = EYE_HEIGHT[stage];
+  const gap = EYE_GAP[stage];
+  const iris = canvas.mask();
+  const pupils = canvas.mask();
+  const lids = canvas.mask();
+  const glints = canvas.mask();
+  for (const side of [-1, 1]) {
+    const left = cx + side * gap - (w - 1) / 2 + pose.look;
+    const top = cy - h;
+    if (pose.slow > 0.67) {
+      for (let x = 0; x < w; x++) lids.addPixel(left + x, top + 1 + (x === 0 || x === w - 1 ? 1 : 0));
+      continue;
+    }
+    if (pose.blink) {
+      for (let x = 0; x < w; x++) lids.addPixel(left + x, top + Math.ceil(h / 2));
+      continue;
+    }
+    const shut = pose.slow > 0.34 ? Math.ceil(h / 2) : 0;
+    for (let y = shut; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const corner = w > 3 && (y === 0 || y === h - 1) && (x === 0 || x === w - 1);
+        if (!corner) iris.addPixel(left + x, top + y);
+      }
+      pupils.addPixel(left + (w - 1) / 2, top + y);
+    }
+    if (shut) for (let x = 0; x < w; x++) lids.addPixel(left + x, top + shut - 1);
+    else glints.addPixel(left + (w > 3 ? 1 : 0), top);
+  }
+  canvas.fill(iris, C4.iris);
+  canvas.fill(pupils, C4.eye);
+  canvas.fill(lids, C4.lid);
+  canvas.fill(glints, C4.white);
+}
+function renderSprite3(pose, traits) {
+  const k = STAGE_SCALE[traits.stage];
+  const canvas = new Canvas(LOCAL3, LOCAL3);
+  drawTail(canvas, pose, k, pose.slow);
+  drawBody3(canvas, k);
+  drawCollar(canvas, k);
+  drawHead2(canvas, pose, traits, k);
+  canvas.strengthenEdges([[C4.line, C4.rim]]);
+  return canvas;
+}
+var prepare3 = perTraits((traits) => buildPoses3(traits));
+function drawHearts(frame, index, k) {
+  for (const { start, side } of HEARTS) {
+    const age = (index - start + FRAMES4) % FRAMES4;
+    if (age >= HEART_LIFE) continue;
+    const drift = Math.sin(TAU * age / 24) * 2;
+    const x = FLOOR2[0] + side * round(21 * k) + round(drift) - 2;
+    const y = FLOOR2[1] - round(46 * k) - round(HEART_RISE * age / HEART_LIFE) - 2;
+    HEART_ART.forEach((row, dy) => {
+      for (let dx = 0; dx < row.length; dx++) {
+        const px = x + dx;
+        const py = y + dy;
+        if (row[dx] === "X" && px >= MARGIN4 && px < WIDTH4 - MARGIN4 && py >= MARGIN4 && py < HEIGHT4 - MARGIN4) {
+          frame.pixels[py * WIDTH4 + px] = C4.heart;
+        }
+      }
+    });
+  }
+}
+function drawButterfly(frame, pose) {
+  const left = round(pose.fly[0]) - 3;
+  const top = round(pose.fly[1]) - 1;
+  FLAP[pose.flap].forEach((row, dy) => {
+    for (let dx = 0; dx < row.length; dx++) {
+      if (row[dx] === ".") continue;
+      const px = left + dx;
+      const py = top + dy;
+      if (px >= MARGIN4 && px < WIDTH4 - MARGIN4 && py >= MARGIN4 && py < HEIGHT4 - MARGIN4) {
+        frame.pixels[py * WIDTH4 + px] = row[dx] === "b" ? C4.rim : C4.wing;
+      }
+    }
+  });
+}
+function draw4(index, traits) {
+  const poses = prepare3(traits);
+  const frame = new Canvas(WIDTH4, HEIGHT4);
+  drawButterfly(frame, poses[index]);
+  drawHearts(frame, index, STAGE_SCALE[traits.stage]);
+  renderSprite3(poses[index], traits).stampOnto(frame, FLOOR2[0] - ORIGIN_X, FLOOR2[1] - ORIGIN_Y, MARGIN4);
+  return frame.pixels;
+}
+var cat = defineCritter({
+  id: "cat",
+  name: "Cat",
+  blurb: "Sits flicking its tail and watching a butterfly, and once a loop gives a slow blink and floats up hearts.",
+  alt: "Animated pixel art of a cat sitting with its tail flicking, watching a butterfly, then giving a slow blink and floating up little hearts",
+  width: WIDTH4,
+  height: HEIGHT4,
+  frames: FRAMES4,
+  delayMs: 60,
+  poster: 20,
+  colourNames: COLOUR_NAMES4,
+  bodyColour: "body",
+  accentColours: ["ribbon", "heart", "wing"],
+  fixedColours: ["iris", "eye", "lid", "white", "nose", "earIn", "bell"],
+  edgeColours: ["rim", "heart", "wing"],
+  colourways: [
+    {
+      id: "marmalade",
+      name: "Marmalade",
+      colours: {
+        rim: "#b4531a",
+        line: "#5e2410",
+        body: "#f0903a",
+        bodyHi: "#ffb860",
+        bodyLo: "#d06a1c",
+        bib: "#fff0d4",
+        earIn: "#ff9fa8",
+        iris: "#8fd24e",
+        eye: "#1c1010",
+        lid: "#5e2410",
+        white: "#ffffff",
+        nose: "#ff8aa0",
+        ribbon: "#d8404f",
+        bell: "#ffd23f",
+        heart: "#f2527a",
+        wing: "#4a9be8"
+      }
+    },
+    {
+      id: "smoke",
+      name: "Smoke",
+      colours: {
+        rim: "#5f6b80",
+        line: "#272d3c",
+        body: "#8f9aae",
+        bodyHi: "#b6bfce",
+        bodyLo: "#69748a",
+        bib: "#eef1f6",
+        earIn: "#f0a0b0",
+        iris: "#e8b73a",
+        eye: "#14121a",
+        lid: "#272d3c",
+        white: "#ffffff",
+        nose: "#f0899b",
+        ribbon: "#3a8fd0",
+        bell: "#ffd23f",
+        heart: "#f2527a",
+        wing: "#e0902a"
+      }
+    },
+    {
+      id: "tuxedo",
+      name: "Tuxedo",
+      colours: {
+        rim: "#7b8097",
+        line: "#0c0c12",
+        body: "#383845",
+        bodyHi: "#56566a",
+        bodyLo: "#1f1f2a",
+        bib: "#f7f0e2",
+        earIn: "#e8909c",
+        iris: "#f2c53d",
+        eye: "#0a0a0f",
+        lid: "#f2c53d",
+        white: "#ffffff",
+        nose: "#f0899b",
+        ribbon: "#e0453d",
+        bell: "#ffd23f",
+        heart: "#f2527a",
+        wing: "#36b58f"
+      }
+    }
+  ],
+  draw: draw4
+});
+
+// src/critters/dragon.ts
+var WIDTH5 = 180;
+var HEIGHT5 = 120;
+var FRAMES5 = 200;
+var MARGIN5 = 2;
 var FLAP_CYCLES = 24;
 var SWAY_CYCLES = 12;
 var BURSTS = 3;
 var SPARKS_PER_BURST = 4;
-var LOCAL3 = 140;
-var ORIGIN3 = LOCAL3 / 2;
+var LOCAL4 = 140;
+var ORIGIN3 = LOCAL4 / 2;
 var ELEVATION = 0.25;
 var REST_YAW2 = 14 * Math.PI / 180;
 var WAYPOINTS3 = [
@@ -1755,7 +2214,7 @@ var WAYPOINTS3 = [
   [66, 47],
   [40, 62]
 ];
-var COLOUR_NAMES4 = [
+var COLOUR_NAMES5 = [
   "rim",
   // silhouette edge: must read on light and dark pages
   "line",
@@ -1777,20 +2236,20 @@ var COLOUR_NAMES4 = [
   "fireOuter",
   "fireMid"
 ];
-var C4 = colourIndexes(COLOUR_NAMES4);
+var C5 = colourIndexes(COLOUR_NAMES5);
 var ART_KEY2 = {
-  o: C4.body,
-  h: C4.bodyHi,
-  s: C4.bodyLo,
-  c: C4.belly,
-  d: C4.bellyLo,
-  f: C4.wing,
-  g: C4.wingLo,
-  i: C4.horn,
-  j: C4.hornLo,
-  k: C4.eye,
-  n: C4.line,
-  w: C4.white
+  o: C5.body,
+  h: C5.bodyHi,
+  s: C5.bodyLo,
+  c: C5.belly,
+  d: C5.bellyLo,
+  f: C5.wing,
+  g: C5.wingLo,
+  i: C5.horn,
+  j: C5.hornLo,
+  k: C5.eye,
+  n: C5.line,
+  w: C5.white
 };
 var HEAD_SIDE2 = parseArt(
   `
@@ -1832,13 +2291,13 @@ function withEyeShut2(art, [first, last]) {
   for (let y = first; y < last; y++) {
     for (let x = 0; x < art.width; x++) {
       const at = y * art.width + x;
-      if (pixels[at] === C4.white || pixels[at] === C4.eye) {
-        pixels[at] = C4.body;
+      if (pixels[at] === C5.white || pixels[at] === C5.eye) {
+        pixels[at] = C5.body;
         columns.add(x);
       }
     }
   }
-  for (const x of columns) pixels[(first + 1) * art.width + x] = C4.line;
+  for (const x of columns) pixels[(first + 1) * art.width + x] = C5.line;
   return { ...art, pixels };
 }
 function makeHead(side, eyeRows, front, anchors, noses) {
@@ -1903,7 +2362,7 @@ var CHEST = 2 / 9;
 var HIP2 = 4 / 9;
 var SPIKES_AT = [0.1, 0.18, 0.55, 0.66, 0.77];
 var SPINE_U2 = Float64Array.from({ length: SAMPLES2 }, (_, i) => i / (SAMPLES2 - 1));
-var TAIL_WEIGHT2 = SPINE_U2.map((u) => clamp((u - HIP2) / (1 - HIP2), 0, 1) ** 1.5);
+var TAIL_WEIGHT3 = SPINE_U2.map((u) => clamp((u - HIP2) / (1 - HIP2), 0, 1) ** 1.5);
 var NECK_WEIGHT = SPINE_U2.map((u) => clamp((CHEST - u) / CHEST, 0, 1));
 var WING_WRIST = [8, 15];
 var WING_TIPS = [
@@ -1942,23 +2401,23 @@ var SIZES = STAGE_SCALE.map((k) => {
     limbOffset: LIMB_OFFSET2 * k
   };
 });
-function buildPoses3({ mood }) {
-  const { x, y, vx, vy } = roam(WAYPOINTS3, mood, FRAMES4);
+function buildPoses4({ mood }) {
+  const { x, y, vx, vy } = roam(WAYPOINTS3, mood, FRAMES5);
   const yaw = yawFromTravel(vx, REST_YAW2, 0.7, 7);
   const pitch = smooth(vy.map((v) => clamp(-v * 0.24, -0.3, 0.3)), 9);
   const climb = smooth(vy.map((v) => clamp(-v / 1.2, -1, 1)), 9);
   const flap = cumulativePhase(climb.map((c) => 1 + 0.4 * c), cyclesFor(mood, FLAP_CYCLES));
   const sway = cyclesFor(mood, SWAY_CYCLES);
   const lift = mood === "resting" ? 0.55 : 0.75;
-  const blinks = blinkFrames(mood, [28, 36, 128], FRAMES4);
-  return Array.from({ length: FRAMES4 }, (_, i) => ({
-    t: i / FRAMES4,
+  const blinks = blinkFrames(mood, [28, 36, 128], FRAMES5);
+  return Array.from({ length: FRAMES5 }, (_, i) => ({
+    t: i / FRAMES5,
     x: x[i],
     y: y[i],
     vx: vx[i],
     flap: flap[i],
     lift: clamp(lift + 0.35 * climb[i], 0.45, 1),
-    sway: TAU * sway * i / FRAMES4,
+    sway: TAU * sway * i / FRAMES5,
     blink: blinks.has(i),
     view: { yaw: yaw[i], pitch: pitch[i], elevation: ELEVATION, origin: ORIGIN3 }
   }));
@@ -1969,20 +2428,20 @@ function animatedSpine2(pose, size) {
   const y = new Float64Array(SAMPLES2);
   const z = new Float64Array(SAMPLES2);
   for (let i = 0; i < SAMPLES2; i++) {
-    const tail = TAIL_WEIGHT2[i];
+    const tail = TAIL_WEIGHT3[i];
     y[i] = spineY[i] + tail * 3.2 * k * Math.sin(pose.sway - 3 * tail) + NECK_WEIGHT[i] * k * Math.sin(pose.flap + 1.2);
     z[i] = tail * 2.5 * k * Math.sin(pose.sway + 1);
   }
   return { x: spineX, y, z, radius: spineR };
 }
-var TUBE2 = { fill: C4.body, low: C4.bodyLo, high: C4.bodyHi, belly: C4.belly, bellyLow: C4.bellyLo, line: C4.line };
+var TUBE2 = { fill: C5.body, low: C5.bodyLo, high: C5.bodyHi, belly: C5.belly, bellyLow: C5.bellyLo, line: C5.line };
 function drawBellyPlates(canvas, pose, spine, k, include) {
   const { x, y, z, radius } = spine;
   const dx = gradient(x);
   const dy = gradient(y);
   const belly = canvas.mask();
   canvas.pixels.forEach((colour, i) => {
-    belly.bits[i] = colour === C4.belly ? 1 : 0;
+    belly.bits[i] = colour === C5.belly ? 1 : 0;
   });
   const plates = canvas.mask();
   for (const u of bandPositions(0.1, 0.07, k, 6)) {
@@ -1998,7 +2457,7 @@ function drawBellyPlates(canvas, pose, spine, k, include) {
       project(pose.view, underX + across[0], underY + across[1], z[j])
     ]);
   }
-  canvas.fill(plates.and(belly), C4.bellyLo);
+  canvas.fill(plates.and(belly), C5.bellyLo);
 }
 function drawChain(canvas, pose, spine, k, include) {
   drawTube(canvas, pose.view, spine, TUBE2, (i) => include(SPINE_U2[i]), (i) => SPINE_U2[i] < 0.82);
@@ -2033,7 +2492,7 @@ function drawSpikes(canvas, pose, spine, k) {
     );
     mask.addPolygon([corner(-1), tip, corner(1)]);
   }
-  canvas.sticker(mask, C4.wing, C4.line);
+  canvas.sticker(mask, C5.wing, C5.line);
 }
 function drawWing(canvas, pose, side, size, marks) {
   const { wrist: WING_WRIST2, tips: WING_TIPS2, root: WING_ROOT2, shoulder: SHOULDER3, scale: k } = size;
@@ -2056,7 +2515,7 @@ function drawWing(canvas, pose, side, size, marks) {
     );
   };
   const near = side * Math.cos(pose.view.yaw) > 0;
-  const shades = near ? [C4.wingHi, C4.wing, C4.wingHi, C4.wing] : [C4.wingFar, C4.wingFarLo, C4.wingFar, C4.wingFarLo];
+  const shades = near ? [C5.wingHi, C5.wing, C5.wingHi, C5.wing] : [C5.wingFar, C5.wingFarLo, C5.wingFar, C5.wingFarLo];
   const shoulder = point([0, 0]);
   const wrist = point(WING_WRIST2);
   const tips = WING_TIPS2.map(point);
@@ -2085,12 +2544,12 @@ function drawWing(canvas, pose, side, size, marks) {
   const fingers = canvas.mask();
   for (const tip of tips) fingers.addLine([wrist, tip]);
   const edgeOn = Math.abs(tips[0][1] - wrist[1]) < 4 * k;
-  const bone = near ? C4.body : C4.bodyLo;
+  const bone = near ? C5.body : C5.bodyLo;
   const outline = outlined.grown();
-  canvas.fill(outline, C4.line);
+  canvas.fill(outline, C5.line);
   panels.forEach((panel, i) => canvas.fill(panel, edgeOn ? shades[1] : shades[i]));
   if (!edgeOn) {
-    canvas.fill(fingers.grown().minus(outline), C4.line);
+    canvas.fill(fingers.grown().minus(outline), C5.line);
     canvas.fill(fingers, bone);
   }
   canvas.fill(arm, bone);
@@ -2104,7 +2563,7 @@ function drawWing(canvas, pose, side, size, marks) {
     }
     const membrane = canvas.mask();
     for (const panel of panels) membrane.add(panel);
-    canvas.fill(studs.and(membrane), near ? C4.horn : C4.hornLo);
+    canvas.fill(studs.and(membrane), near ? C5.horn : C5.hornLo);
   }
 }
 function placeHead(pose, spine, head) {
@@ -2133,9 +2592,9 @@ function placeHead(pose, spine, head) {
   const top = round(hy) - anchorY;
   return { art, left, top, nose: [left + noseX, top + noseY], facing };
 }
-function drawHead2(canvas, pose, spine, head) {
+function drawHead3(canvas, pose, spine, head) {
   const { art, left, top } = placeHead(pose, spine, head);
-  canvas.stampArt(art, left, top, C4.line);
+  canvas.stampArt(art, left, top, C5.line);
 }
 function drawTailFin(canvas, pose, spine, k) {
   const last = SAMPLES2 - 1;
@@ -2160,14 +2619,14 @@ function drawTailFin(canvas, pose, spine, k) {
   ];
   const outline = [point(0, 0), point(reach * 0.4, half), point(reach, 0), point(reach * 0.4, -half)];
   const fin = canvas.mask().addPolygon(outline);
-  canvas.sticker(fin, C4.wing, C4.line);
+  canvas.sticker(fin, C5.wing, C5.line);
   const vein = canvas.mask().addLine([point(reach * 0.15, 0), point(reach * 0.85, 0)]);
-  canvas.fill(vein.and(fin), C4.wingLo);
+  canvas.fill(vein.and(fin), C5.wingLo);
 }
-function renderSprite3(pose, traits) {
+function renderSprite4(pose, traits) {
   const size = SIZES[traits.stage];
   const k = size.scale;
-  const canvas = new Canvas(LOCAL3, LOCAL3);
+  const canvas = new Canvas(LOCAL4, LOCAL4);
   const spine = animatedSpine2(pose, size);
   const cosYaw = Math.cos(pose.view.yaw);
   const sinYaw = Math.sin(pose.view.yaw);
@@ -2185,17 +2644,17 @@ function renderSprite3(pose, traits) {
   for (const side of [1, -1]) {
     parts.push([side * cosYaw * 15 - sinYaw * 5, () => drawWing(canvas, pose, side, size, traits.marks)]);
     const near = side * cosYaw > 0;
-    const limb = { fill: near ? C4.body : C4.bodyLo, claw: near ? C4.horn : C4.hornLo, line: C4.line };
+    const limb = { fill: near ? C5.body : C5.bodyLo, claw: near ? C5.horn : C5.hornLo, line: C5.line };
     const z = side * size.limbOffset;
     const { arm, leg } = size;
     parts.push([arm[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, arm, z, 2.3 * k, 1.3 * k, limb)]);
     parts.push([leg[0][0] * sinYaw + z * cosYaw, () => drawLimb(canvas, pose.view, leg, z, 3.6 * k, 1.6 * k, limb)]);
   }
-  parts.push([12, () => drawHead2(canvas, pose, spine, HEADS2[traits.stage])]);
+  parts.push([12, () => drawHead3(canvas, pose, spine, HEADS2[traits.stage])]);
   parts.push([tailDepth + 0.5, () => drawTailFin(canvas, pose, spine, k)]);
   parts.sort((a, b) => a[0] - b[0]);
-  for (const [, draw7] of parts) draw7();
-  canvas.strengthenEdges([[C4.line, C4.rim]]);
+  for (const [, draw12] of parts) draw12();
+  canvas.strengthenEdges([[C5.line, C5.rim]]);
   return canvas;
 }
 function spriteOffset2(pose, k) {
@@ -2207,7 +2666,7 @@ function snoutSparks(poses, traits) {
   const head = HEADS2[traits.stage];
   return Array.from({ length: BURSTS * SPARKS_PER_BURST }, (_, n) => {
     const burst = Math.floor(n / SPARKS_PER_BURST);
-    const birth = (20 + Math.floor(burst * FRAMES4 / BURSTS) + n % SPARKS_PER_BURST * 3) % FRAMES4;
+    const birth = (20 + Math.floor(burst * FRAMES5 / BURSTS) + n % SPARKS_PER_BURST * 3) % FRAMES5;
     const pose = poses[birth];
     const { nose, facing } = placeHead(pose, animatedSpine2(pose, size), head);
     const [ox, oy] = spriteOffset2(pose, size.scale);
@@ -2221,21 +2680,21 @@ function snoutSparks(poses, traits) {
     };
   });
 }
-var prepare3 = perTraits((traits) => {
-  const poses = buildPoses3(traits);
+var prepare4 = perTraits((traits) => {
+  const poses = buildPoses4(traits);
   return { poses, embers: snoutSparks(poses, traits) };
 });
-function draw4(index, traits) {
-  const { poses, embers } = prepare3(traits);
-  const frame = new Canvas(WIDTH4, HEIGHT4);
-  forEachSpark(embers, index, FRAMES4, (x, y, age) => {
-    if (x >= MARGIN4 && x < WIDTH4 - MARGIN4 && y >= MARGIN4 && y < HEIGHT4 - MARGIN4) {
-      frame.pixels[y * WIDTH4 + x] = age < 0.5 ? C4.fireMid : C4.fireOuter;
+function draw5(index, traits) {
+  const { poses, embers } = prepare4(traits);
+  const frame = new Canvas(WIDTH5, HEIGHT5);
+  forEachSpark(embers, index, FRAMES5, (x, y, age) => {
+    if (x >= MARGIN5 && x < WIDTH5 - MARGIN5 && y >= MARGIN5 && y < HEIGHT5 - MARGIN5) {
+      frame.pixels[y * WIDTH5 + x] = age < 0.5 ? C5.fireMid : C5.fireOuter;
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset2(pose, SIZES[traits.stage].scale);
-  renderSprite3(pose, traits).stampOnto(frame, ox, oy, MARGIN4);
+  renderSprite4(pose, traits).stampOnto(frame, ox, oy, MARGIN5);
   return frame.pixels;
 }
 var dragon = defineCritter({
@@ -2243,12 +2702,12 @@ var dragon = defineCritter({
   name: "Dragon",
   blurb: "Flaps, soars and turns to look at you, puffing little sparks.",
   alt: "Animated pixel art of a dragon with a spade-tipped tail, flapping its wings as it wanders around the frame",
-  width: WIDTH4,
-  height: HEIGHT4,
-  frames: FRAMES4,
+  width: WIDTH5,
+  height: HEIGHT5,
+  frames: FRAMES5,
   delayMs: 60,
   poster: 46,
-  colourNames: COLOUR_NAMES4,
+  colourNames: COLOUR_NAMES5,
   bodyColour: "body",
   accentColours: ["wingHi", "wing", "wingLo", "wingFar", "wingFarLo", "fireOuter", "fireMid"],
   fixedColours: ["horn", "hornLo", "eye", "white"],
@@ -2327,19 +2786,457 @@ var dragon = defineCritter({
       }
     }
   ],
-  draw: draw4
+  draw: draw5
+});
+
+// src/critters/frog.ts
+var WIDTH6 = 180;
+var HEIGHT6 = 120;
+var FRAMES6 = 200;
+var MARGIN6 = 2;
+var PAD_RX = 22;
+var PAD_RY = 7;
+var BOBS = 3;
+var BREATHS2 = 12;
+var BUZZ = 16;
+var GLANCES = 2;
+var PADS = [
+  [120, 96],
+  [120, 56],
+  [66, 56],
+  [66, 96]
+];
+var NOTCH = [0.5, 2.3, 3.7, 5.4];
+var HOPS_FROM = 148;
+var ARRIVE = 100;
+var SPAN = FRAMES6 - HOPS_FROM + ARRIVE;
+var FLIGHT = 10;
+var CROUCH = 4;
+var HOPS = { resting: 0, steady: 4, lively: 8 };
+var FLY_ENTER = 84;
+var FLY_HOVER = 100;
+var MOUTH_OPEN = 116;
+var TONGUE_HIT = 120;
+var FLY_GONE = 126;
+var GULP_FROM = 127;
+var GULP_END = 142;
+var FLY_START = [86, 3];
+var DRIFT = [
+  [-8, -2],
+  [0, -7],
+  [8, -3],
+  [7, 5],
+  [0, 2],
+  [-7, 6]
+];
+var BUBBLES2 = 60;
+var MARKS3 = [
+  [],
+  [[0, 20]],
+  [
+    [-4, 19],
+    [4, 19]
+  ],
+  [
+    [-5.5, 18],
+    [0, 21],
+    [5.5, 18]
+  ]
+];
+var COLOUR_NAMES6 = [
+  "rim",
+  "line",
+  "body",
+  "bodyHi",
+  "bodyLo",
+  "belly",
+  "bellyLo",
+  "spot",
+  "eye",
+  "white",
+  "blush",
+  "mouth",
+  "tongue",
+  "bug",
+  "pad",
+  "padLo",
+  "water"
+];
+var C6 = colourIndexes(COLOUR_NAMES6);
+var smoothstep = (t) => t * t * (3 - 2 * t);
+var squash = (since) => since < 4 ? -(1 - since / 4) : 0;
+function stanceAt(index, hops) {
+  const sit = (stretch, heading = false) => ({ from: 0, to: 0, t: -1, stretch, heading });
+  if (hops === 0) return sit(0);
+  const u = (index - HOPS_FROM + FRAMES6) % FRAMES6;
+  if (u >= SPAN) return sit(squash(u - SPAN));
+  const length = SPAN / hops;
+  const j = Math.floor(u / length);
+  const w = u - j * length;
+  const leave = length - FLIGHT;
+  const from = j % PADS.length;
+  const to = (j + 1) % PADS.length;
+  if (w < leave) {
+    const crouch = w - (leave - CROUCH) + 1;
+    return { from, to, t: -1, stretch: crouch > 0 ? -crouch / CROUCH : j > 0 ? squash(w) : 0, heading: crouch > 0 };
+  }
+  const t = (w - leave) / FLIGHT;
+  return { from, to, t, stretch: clamp(2 * Math.sin(Math.PI * t) - 0.6, -0.6, 1), heading: true };
+}
+function buildPoses5(traits) {
+  const k = STAGE_SCALE[traits.stage];
+  const { mood } = traits;
+  const hops = HOPS[mood];
+  const drift = roam(DRIFT, mood, FRAMES6);
+  const bobs = cyclesFor(mood, BOBS);
+  const breaths = cyclesFor(mood, BREATHS2);
+  const glances = cyclesFor(mood, GLANCES);
+  const buzz = cyclesFor(mood, BUZZ);
+  const blinks = blinkFrames(mood, [20, 66, 176], FRAMES6);
+  const padAt = (pad, i) => [
+    PADS[pad][0],
+    PADS[pad][1] + 1 + round(Math.sin(TAU * bobs * i / FRAMES6 + pad * 1.9))
+  ];
+  const hoverAt = (i) => {
+    const a = TAU * buzz * i / FRAMES6;
+    const r = 2 + 1.2 * k;
+    return [PADS[0][0] - 20 * k + drift.x[i] + r * Math.cos(a), PADS[0][1] - 26 * k + drift.y[i] + 0.7 * r * Math.sin(a)];
+  };
+  const flyAt = (i) => {
+    const hover = hoverAt(i);
+    if (i >= FLY_HOVER) return hover;
+    const e = smoothstep((i - FLY_ENTER) / (FLY_HOVER - FLY_ENTER));
+    return [FLY_START[0] + (hover[0] - FLY_START[0]) * e, FLY_START[1] + (hover[1] - FLY_START[1]) * e];
+  };
+  const [hx, hy] = flyAt(TONGUE_HIT);
+  const caught = [round(hx), round(hy)];
+  const poses = Array.from({ length: FRAMES6 }, (_, i) => {
+    const stance = stanceAt(i, hops);
+    let x;
+    let y;
+    if (stance.t < 0) {
+      [x, y] = padAt(stance.from, i);
+    } else {
+      const [x0, y0] = padAt(stance.from, i);
+      const [x1, y1] = padAt(stance.to, i);
+      x = x0 + (x1 - x0) * stance.t;
+      y = y0 + (y1 - y0) * stance.t - (8 + 3 * k) * 4 * stance.t * (1 - stance.t);
+    }
+    const glance = Math.sin(TAU * glances * i / FRAMES6);
+    let look = [glance > 0.6 ? 1 : glance < -0.6 ? -1 : 0, 0];
+    if (stance.heading) {
+      const dx = PADS[stance.to][0] - PADS[stance.from][0];
+      const dy = PADS[stance.to][1] - PADS[stance.from][1];
+      look = [Math.sign(dx), dy < -10 ? -1 : dy > 10 ? 1 : 0];
+    }
+    const flyOn = i >= FLY_ENTER && i < FLY_GONE;
+    const stuck = i > TONGUE_HIT && i < FLY_GONE;
+    const fly = flyOn && !stuck ? flyAt(i) : null;
+    if (fly || stuck) {
+      const [fx, fy] = fly ?? caught;
+      if (i >= FLY_HOVER - 4) {
+        const dx = fx - x;
+        const dy = fy - (y - 24 * k);
+        look = [Math.abs(dx) > 6 ? Math.sign(dx) : 0, dy < -6 ? -1 : dy > 6 ? 1 : 0];
+      }
+    }
+    const out = i >= MOUTH_OPEN + 1 && i <= FLY_GONE;
+    const half = i === MOUTH_OPEN || i === FLY_GONE + 1;
+    const gulp = i >= GULP_FROM && i <= GULP_END ? Math.sin(Math.PI * (i - GULP_FROM) / (GULP_END - GULP_FROM)) : 0;
+    let tongue = 0;
+    if (i > MOUTH_OPEN && i <= TONGUE_HIT) tongue = (i - MOUTH_OPEN) / (TONGUE_HIT - MOUTH_OPEN);
+    else if (stuck) tongue = 1 - (i - TONGUE_HIT) / (FLY_GONE - TONGUE_HIT);
+    return {
+      x,
+      y,
+      stretch: stance.stretch,
+      look,
+      mouth: out ? 1 : half ? 0.5 : 0,
+      gulp,
+      breath: Math.sin(TAU * breaths * i / FRAMES6),
+      shut: blinks.has(i) || gulp > 0.35,
+      tongue,
+      fly,
+      stuck,
+      flap: i % 2 === 0
+    };
+  });
+  return { poses, caught };
+}
+function ellipse3(mask, cx, cy, rx, ry) {
+  const x0 = Math.max(0, Math.floor(cx - rx - 1));
+  const x1 = Math.min(mask.width, Math.ceil(cx + rx + 2));
+  const y0 = Math.max(0, Math.floor(cy - ry - 1));
+  const y1 = Math.min(mask.height, Math.ceil(cy + ry + 2));
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const nx = (x - cx) / rx;
+      const ny = (y - cy) / ry;
+      if (nx * nx + ny * ny <= 1) mask.bits[y * mask.width + x] = 1;
+    }
+  }
+  return mask;
+}
+function drawBubbles(canvas, bubbles2, index) {
+  forEachSpark(bubbles2, index, FRAMES6, (x, y, age) => {
+    const dots = age < 0.5 ? [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]] : [[x, y]];
+    for (const [px, py] of dots) {
+      if (px >= MARGIN6 && px < WIDTH6 - MARGIN6 && py >= MARGIN6 && py < HEIGHT6 - MARGIN6) canvas.pixels[py * WIDTH6 + px] = C6.water;
+    }
+  });
+}
+function drawPad(canvas, pad, index, bobs) {
+  const [cx, baseY] = PADS[pad];
+  const cy = baseY + round(Math.sin(TAU * bobs * index / FRAMES6 + pad * 1.9));
+  const shape = ellipse3(canvas.mask(), cx, cy, PAD_RX, PAD_RY);
+  for (let y = cy - PAD_RY; y <= cy + PAD_RY; y++) {
+    for (let x = cx - PAD_RX; x <= cx + PAD_RX; x++) {
+      const nx = (x - cx) / PAD_RX;
+      const ny = (y - cy) / PAD_RY;
+      if (nx * nx + ny * ny < 0.02) continue;
+      const turn = Math.abs(Math.atan2(ny, nx) - NOTCH[pad]);
+      if (Math.min(turn, TAU - turn) < 0.17) shape.bits[y * canvas.width + x] = 0;
+    }
+  }
+  canvas.fill(shape, C6.pad);
+  canvas.fill(shape.minus(shape.moved(0, -1)), C6.padLo);
+}
+function drawFrog(canvas, pose, traits) {
+  const k = STAGE_SCALE[traits.stage];
+  const s = pose.stretch;
+  const wf = 1 - 0.1 * s;
+  const hf = 1 + 0.16 * s;
+  const leap = Math.max(0, s);
+  const ax = round(pose.x);
+  const ay = round(pose.y);
+  const across = (n) => round(n * k * wf);
+  const up = (n) => n * k * hf;
+  const mask = () => canvas.mask();
+  const sink = pose.gulp > 0.2 ? Math.max(1, round(1.3 * k)) : 0;
+  const bodyRy = 12 * k * hf;
+  const body = ellipse3(mask(), ax, ay - bodyRy, 15 * k * wf, bodyRy);
+  const eyeY = round(ay - up(24.5)) + sink;
+  const eyes = mask();
+  const thighs = mask();
+  const feet = mask();
+  const arms = mask();
+  const hands = mask();
+  for (const side of [-1, 1]) {
+    eyes.addDisc(ax + side * across(9.5), eyeY, 6 * k);
+    ellipse3(thighs, ax + side * across(14 + 1.5 * leap), ay - up(8 - 3 * leap), 7.5 * k * wf, 8 * k * hf);
+    ellipse3(feet, ax + side * across(17 + 3 * leap), ay - up(1.5 - 8 * leap), (7 - 1.5 * leap) * k * wf, Math.max(1.4, 2.5 * k));
+    ellipse3(arms, ax + side * across(9), ay - up(4), Math.max(1.5, 2.8 * k), 5 * k * hf);
+    ellipse3(hands, ax + side * across(9.5), ay - up(0.8), 4 * k, Math.max(1.2, 1.8 * k));
+  }
+  const silhouette = mask().add(body).add(eyes).add(thighs).add(feet).add(arms).add(hands);
+  canvas.sticker(silhouette, C6.body, C6.line);
+  canvas.fill(silhouette.minus(silhouette.moved(-1, -2)), C6.bodyLo);
+  canvas.fill(silhouette.minus(silhouette.moved(1, 2)), C6.bodyHi);
+  const pulse = 0.6 * k * pose.breath + 2.2 * k * pose.gulp;
+  const belly = ellipse3(mask(), ax, ay - up(3.5), 10.5 * k * wf, 4.5 * k * hf + pulse).and(body);
+  canvas.fill(belly, C6.belly);
+  canvas.fill(belly.minus(belly.moved(0, -1)), C6.bellyLo);
+  for (const limb of [thighs, feet, arms, hands]) {
+    canvas.sticker(limb, C6.body, C6.line);
+    canvas.fill(limb.minus(limb.moved(-1, -1)), C6.bodyLo);
+    canvas.fill(limb.minus(limb.moved(1, 1)), C6.bodyHi);
+  }
+  const spots = mask();
+  for (const [dx, dy] of MARKS3[traits.marks]) spots.addDisc(ax + round(dx * k * wf), round(ay - up(dy)), Math.max(1.2, 1.6 * k));
+  canvas.fill(spots.and(body), C6.spot);
+  const cheeks = mask();
+  for (const side of [-1, 1]) {
+    const cx = ax + side * across(12);
+    const cy = round(ay - up(15));
+    for (let x = -1; x <= 1; x++) cheeks.addPixel(cx + x, cy).addPixel(cx + x, cy + 1);
+  }
+  canvas.fill(cheeks.and(body), C6.blush);
+  const whiteR = Math.max(2.1, 3.7 * k);
+  const pupil = k >= 0.85 ? 3 : 2;
+  for (const side of [-1, 1]) {
+    const ex = ax + side * across(9.5);
+    const sclera = mask().addDisc(ex, eyeY, whiteR);
+    const ring = k >= 0.7;
+    if (pose.shut) {
+      if (ring) canvas.sticker(sclera, C6.body, C6.line);
+      const lid = mask();
+      for (let x = -Math.trunc(whiteR); x <= Math.trunc(whiteR); x++) lid.addPixel(ex + x, eyeY + 1);
+      canvas.fill(lid.and(sclera), C6.line);
+      continue;
+    }
+    if (ring) canvas.sticker(sclera, C6.white, C6.line);
+    else canvas.fill(sclera, C6.white);
+    const dark = mask();
+    const left = ex - Math.floor(pupil / 2) + pose.look[0];
+    const top = eyeY - Math.floor(pupil / 2) + pose.look[1];
+    for (let y = 0; y < pupil; y++) for (let x = 0; x < pupil; x++) dark.addPixel(left + x, top + y);
+    canvas.fill(dark.and(sclera), C6.eye);
+    if (pupil === 3) canvas.fill(mask().addPixel(left, top), C6.white);
+  }
+  const half = Math.max(5, round(13 * k * wf));
+  const baseY = ay - round(11 * k * hf);
+  const gape = 5 * k * hf * pose.mouth;
+  const lip = mask();
+  const inside = mask();
+  for (let x = -half; x <= half; x++) {
+    const f = (x / half) ** 2;
+    const top = baseY - round(3 * k * f);
+    lip.addPixel(ax + x, top);
+    const rows = round(gape * (1 - f));
+    if (rows > 0) {
+      for (let r = 1; r < rows; r++) inside.addPixel(ax + x, top + r);
+      lip.addPixel(ax + x, top + rows);
+    }
+  }
+  canvas.fill(inside, C6.mouth);
+  canvas.fill(lip, C6.line);
+  return [ax, baseY + round(gape / 2)];
+}
+function drawTongue(canvas, pose, root, caught, k) {
+  if (pose.tongue <= 0) return null;
+  const tipX = round(root[0] + (caught[0] - root[0]) * pose.tongue);
+  const tipY = round(root[1] + (caught[1] - root[1]) * pose.tongue);
+  const line = canvas.mask().addLine([root, [tipX, tipY]]);
+  const tongue = canvas.mask().add(line).add(line.moved(0, 1));
+  if (k >= 0.85) tongue.add(line.moved(1, 0));
+  tongue.addDisc(tipX, tipY, k >= 0.85 ? 1.5 : 1);
+  canvas.fill(tongue, C6.tongue);
+  return [tipX, tipY];
+}
+function drawFly(canvas, x, y, flap) {
+  const wings = flap ? [[-2, -1], [-2, -2], [2, -1], [2, -2]] : [[-1, -1], [-1, -2], [1, -1], [1, -2]];
+  const bug = [[-1, 0], [0, 0], [1, 0], [-1, 1], [0, 1], [1, 1], ...wings];
+  for (const [dx, dy] of bug) {
+    const px = x + dx;
+    const py = y + dy;
+    if (px >= MARGIN6 && px < WIDTH6 - MARGIN6 && py >= MARGIN6 && py < HEIGHT6 - MARGIN6) canvas.pixels[py * WIDTH6 + px] = C6.bug;
+  }
+}
+var bubbles = makeSparks(
+  BUBBLES2,
+  FRAMES6,
+  (birth) => {
+    const [px, py] = PADS[birth % PADS.length];
+    const side = Math.floor(birth / PADS.length) % 2 === 0 ? -1 : 1;
+    return [px + side * (PAD_RX + 3 + birth % 5), py + 4];
+  },
+  { life: [12, 26], vx: [-0.04, 0.04], vy: [-0.9, -0.5] }
+);
+var prepare5 = perTraits(buildPoses5);
+function draw6(index, traits) {
+  const { poses, caught } = prepare5(traits);
+  const pose = poses[index];
+  const k = STAGE_SCALE[traits.stage];
+  const canvas = new Canvas(WIDTH6, HEIGHT6);
+  const bobs = cyclesFor(traits.mood, BOBS);
+  drawBubbles(canvas, bubbles, index);
+  PADS.forEach((_, pad) => drawPad(canvas, pad, index, bobs));
+  const root = drawFrog(canvas, pose, traits);
+  const tip = drawTongue(canvas, pose, root, caught, k);
+  if (pose.fly) drawFly(canvas, round(pose.fly[0]), round(pose.fly[1]), pose.flap);
+  else if (pose.stuck && tip) drawFly(canvas, tip[0], tip[1], pose.flap);
+  canvas.strengthenEdges([[C6.line, C6.rim]]);
+  return canvas.pixels;
+}
+var frog = defineCritter({
+  id: "frog",
+  name: "Frog",
+  blurb: "Hops between lily pads, and once a loop flicks its tongue at a passing fly.",
+  alt: "Animated pixel art of a round frog with big eyes hopping between lily pads and catching a fly with its tongue",
+  width: WIDTH6,
+  height: HEIGHT6,
+  frames: FRAMES6,
+  delayMs: 60,
+  poster: 108,
+  colourNames: COLOUR_NAMES6,
+  bodyColour: "body",
+  accentColours: ["spot"],
+  fixedColours: ["eye", "white", "blush", "mouth", "tongue", "bug", "pad", "padLo", "water"],
+  edgeColours: ["rim", "pad", "padLo", "tongue", "bug", "water"],
+  colourways: [
+    {
+      id: "meadow",
+      name: "Meadow",
+      colours: {
+        rim: "#3e8f2c",
+        line: "#1e4a1c",
+        body: "#86d14e",
+        bodyHi: "#b4ec7d",
+        bodyLo: "#55a533",
+        belly: "#f1f7b4",
+        bellyLo: "#cfdc86",
+        spot: "#f0a830",
+        eye: "#1b2a14",
+        white: "#ffffff",
+        blush: "#ff9a8a",
+        mouth: "#7a2a3a",
+        tongue: "#e8607c",
+        bug: "#7d6bb8",
+        pad: "#3aa874",
+        padLo: "#258a5a",
+        water: "#5ba8d4"
+      }
+    },
+    {
+      id: "cobalt",
+      name: "Cobalt",
+      colours: {
+        rim: "#2d5db5",
+        line: "#172d66",
+        body: "#4a86e8",
+        bodyHi: "#86b4ff",
+        bodyLo: "#2f62bd",
+        belly: "#dce9ff",
+        bellyLo: "#a9c4f0",
+        spot: "#ffd23f",
+        eye: "#1b2a14",
+        white: "#ffffff",
+        blush: "#ff9a8a",
+        mouth: "#7a2a3a",
+        tongue: "#e8607c",
+        bug: "#7d6bb8",
+        pad: "#3aa874",
+        padLo: "#258a5a",
+        water: "#5ba8d4"
+      }
+    },
+    {
+      id: "tomato",
+      name: "Tomato",
+      colours: {
+        rim: "#c24a24",
+        line: "#6b2412",
+        body: "#f0743e",
+        bodyHi: "#ffa070",
+        bodyLo: "#c8501f",
+        belly: "#ffe6c2",
+        bellyLo: "#f1c28c",
+        spot: "#8c2a1a",
+        eye: "#1b2a14",
+        white: "#ffffff",
+        blush: "#ff9a8a",
+        mouth: "#7a2a3a",
+        tongue: "#e8607c",
+        bug: "#7d6bb8",
+        pad: "#3aa874",
+        padLo: "#258a5a",
+        water: "#5ba8d4"
+      }
+    }
+  ],
+  draw: draw6
 });
 
 // src/critters/ghost.ts
-var WIDTH5 = 180;
-var HEIGHT5 = 120;
-var FRAMES5 = 200;
-var MARGIN5 = 2;
-var BOBS = 6;
+var WIDTH7 = 180;
+var HEIGHT7 = 120;
+var FRAMES7 = 200;
+var MARGIN7 = 2;
+var BOBS2 = 6;
 var HEM_CYCLES = 16;
 var SPARKLES = 26;
-var LOCAL4 = 90;
-var ORIGIN4 = LOCAL4 / 2;
+var LOCAL5 = 90;
+var ORIGIN4 = LOCAL5 / 2;
 var RADIUS = 15;
 var SKIRT = 20;
 var HEM_LOBES = 4;
@@ -2356,7 +3253,7 @@ var WAYPOINTS4 = [
   [60, 76],
   [34, 70]
 ];
-var MARKS2 = [
+var MARKS4 = [
   [],
   [[0, -9]],
   [
@@ -2369,32 +3266,32 @@ var MARKS2 = [
     [8, -6]
   ]
 ];
-var EYE_GAP = [4, 5, 5, 6];
-var COLOUR_NAMES5 = ["rim", "line", "body", "bodyHi", "bodyLo", "eye", "white", "blush", "mouth", "sparkle"];
-var C5 = colourIndexes(COLOUR_NAMES5);
-function buildPoses4({ mood, stage }) {
+var EYE_GAP2 = [4, 5, 5, 6];
+var COLOUR_NAMES7 = ["rim", "line", "body", "bodyHi", "bodyLo", "eye", "white", "blush", "mouth", "sparkle"];
+var C7 = colourIndexes(COLOUR_NAMES7);
+function buildPoses6({ mood, stage }) {
   const k = STAGE_SCALE[stage];
-  const { x, y, vx } = roam(WAYPOINTS4, mood, FRAMES5);
+  const { x, y, vx } = roam(WAYPOINTS4, mood, FRAMES7);
   const look = smooth(vx.map((v) => clamp(v * 3.4, -4.5 * k, 4.5 * k)), 13);
   const lean = smooth(vx.map((v) => clamp(v * 1.8, -3 * k, 3 * k)), 21);
-  const blinks = blinkFrames(mood, [30, 60, 170], FRAMES5);
-  const bobs = cyclesFor(mood, BOBS);
+  const blinks = blinkFrames(mood, [30, 60, 170], FRAMES7);
+  const bobs = cyclesFor(mood, BOBS2);
   const hem = cyclesFor(mood, HEM_CYCLES);
-  return Array.from({ length: FRAMES5 }, (_, i) => {
+  return Array.from({ length: FRAMES7 }, (_, i) => {
     const edge = Math.min(i - BOO_START, BOO_END - i);
     const boo = i >= BOO_START && i <= BOO_END ? clamp(edge / 4, 0, 1) : 0;
     return {
       x: x[i],
-      y: y[i] + 2.4 * k * Math.sin(TAU * bobs * i / FRAMES5),
+      y: y[i] + 2.4 * k * Math.sin(TAU * bobs * i / FRAMES7),
       look: look[i],
       lean: lean[i],
-      hem: TAU * hem * i / FRAMES5,
+      hem: TAU * hem * i / FRAMES7,
       boo,
       blink: blinks.has(i)
     };
   });
 }
-function drawBody3(canvas, pose, k) {
+function drawBody4(canvas, pose, k) {
   const body = canvas.mask();
   const radius = RADIUS * k;
   const stretch = 3 * pose.boo * k;
@@ -2408,14 +3305,14 @@ function drawBody3(canvas, pose, k) {
     for (let x = Math.trunc(-half - 6); x <= half + 6; x++) {
       const dx = x - shift;
       if (Math.abs(dx) > half) continue;
-      const tuck = 4 * k * (Math.abs(dx) / half) ** 6;
-      const hem = skirt - tuck + 2.2 * k * Math.sin(HEM_LOBES * Math.PI * (dx + half) / (2 * half) + pose.hem);
+      const tuck2 = 4 * k * (Math.abs(dx) / half) ** 6;
+      const hem = skirt - tuck2 + 2.2 * k * Math.sin(HEM_LOBES * Math.PI * (dx + half) / (2 * half) + pose.hem);
       if (y <= hem) body.addPixel(ORIGIN4 + x, ORIGIN4 + y);
     }
   }
-  canvas.sticker(body, C5.body, C5.line);
-  canvas.fill(body.minus(body.moved(-2, -2)), C5.bodyLo);
-  canvas.fill(body.minus(body.moved(1, 2)), C5.bodyHi);
+  canvas.sticker(body, C7.body, C7.line);
+  canvas.fill(body.minus(body.moved(-2, -2)), C7.bodyLo);
+  canvas.fill(body.minus(body.moved(1, 2)), C7.bodyHi);
   return body;
 }
 function drawArms(canvas, pose, k) {
@@ -2427,15 +3324,15 @@ function drawArms(canvas, pose, k) {
     arms.addDisc(ORIGIN4 + side * reach, ORIGIN4 + 9 * k - lift + 5 * k + side * wave, 3.3 * k);
     arms.addDisc(ORIGIN4 + side * (reach - 2 * k), ORIGIN4 + 11 * k - lift + 5 * k + side * wave, 3 * k);
   }
-  canvas.sticker(arms, C5.body, C5.line);
-  canvas.fill(arms.minus(arms.moved(-1, -1)), C5.bodyLo);
+  canvas.sticker(arms, C7.body, C7.line);
+  canvas.fill(arms.minus(arms.moved(-1, -1)), C7.bodyLo);
 }
 function drawFace2(canvas, pose, body, k, stage) {
   const cx = ORIGIN4 + round(pose.look);
   const cy = ORIGIN4 - round(2 * k) - round(3 * pose.boo * k);
   const eyes = canvas.mask();
   const glints = canvas.mask();
-  const gap = EYE_GAP[stage];
+  const gap = EYE_GAP2[stage];
   const tall = pose.boo > 0.5 ? 5 : 4;
   for (const side of [-1, 1]) {
     const left = cx + side * gap - 1;
@@ -2451,8 +3348,8 @@ function drawFace2(canvas, pose, body, k, stage) {
     }
     glints.addPixel(left, cy);
   }
-  canvas.fill(eyes, C5.eye);
-  canvas.fill(glints, C5.white);
+  canvas.fill(eyes, C7.eye);
+  canvas.fill(glints, C7.white);
   const blush = canvas.mask();
   for (const side of [-1, 1]) {
     const bx = cx + side * (gap + (stage < 2 ? 3 : 4));
@@ -2461,44 +3358,44 @@ function drawFace2(canvas, pose, body, k, stage) {
       blush.addPixel(bx + x, cy + 6);
     }
   }
-  canvas.fill(blush.and(body), C5.blush);
+  canvas.fill(blush.and(body), C7.blush);
   const mouth = canvas.mask();
   if (pose.boo > 0.5) {
     mouth.addDisc(cx, cy + 9, 3.4);
-    canvas.fill(mouth, C5.mouth);
+    canvas.fill(mouth, C7.mouth);
   } else {
     mouth.addPixel(cx - 2, cy + 6).addPixel(cx - 1, cy + 7).addPixel(cx, cy + 7).addPixel(cx + 1, cy + 7).addPixel(cx + 2, cy + 6);
-    canvas.fill(mouth, C5.line);
+    canvas.fill(mouth, C7.line);
   }
 }
 function drawMarks2(canvas, pose, k, marks) {
   const spots = canvas.mask();
-  for (const [dx, dy] of MARKS2[marks]) {
+  for (const [dx, dy] of MARKS4[marks]) {
     const x = ORIGIN4 + round(dx * k) + round(pose.look / 2);
     const y = ORIGIN4 + round(dy * k) - round(3 * pose.boo * k);
     spots.addPixel(x, y).addPixel(x - 1, y).addPixel(x + 1, y).addPixel(x, y - 1).addPixel(x, y + 1);
   }
-  canvas.fill(spots, C5.sparkle);
+  canvas.fill(spots, C7.sparkle);
 }
-function renderSprite4(pose, traits) {
+function renderSprite5(pose, traits) {
   const k = STAGE_SCALE[traits.stage];
-  const canvas = new Canvas(LOCAL4, LOCAL4);
-  const body = drawBody3(canvas, pose, k);
+  const canvas = new Canvas(LOCAL5, LOCAL5);
+  const body = drawBody4(canvas, pose, k);
   drawArms(canvas, pose, k);
   drawMarks2(canvas, pose, k, traits.marks);
   drawFace2(canvas, pose, body, k, traits.stage);
-  canvas.strengthenEdges([[C5.line, C5.rim]]);
+  canvas.strengthenEdges([[C7.line, C7.rim]]);
   return canvas;
 }
 function spriteOffset3(pose) {
   return [round(pose.x) - ORIGIN4, round(pose.y) - ORIGIN4];
 }
-var prepare4 = perTraits((traits) => {
+var prepare6 = perTraits((traits) => {
   const k = STAGE_SCALE[traits.stage];
-  const poses = buildPoses4(traits);
+  const poses = buildPoses6(traits);
   const sparkles = makeSparks(
     SPARKLES,
-    FRAMES5,
+    FRAMES7,
     (birth) => {
       const pose = poses[birth];
       const side = birth % 2 === 0 ? -1 : 1;
@@ -2508,10 +3405,10 @@ var prepare4 = perTraits((traits) => {
   );
   return { poses, sparkles };
 });
-function draw5(index, traits) {
-  const { poses, sparkles } = prepare4(traits);
-  const frame = new Canvas(WIDTH5, HEIGHT5);
-  forEachSpark(sparkles, index, FRAMES5, (x, y, age) => {
+function draw7(index, traits) {
+  const { poses, sparkles } = prepare6(traits);
+  const frame = new Canvas(WIDTH7, HEIGHT7);
+  forEachSpark(sparkles, index, FRAMES7, (x, y, age) => {
     const dots = age < 0.5 ? [
       [x, y],
       [x - 1, y],
@@ -2520,14 +3417,14 @@ function draw5(index, traits) {
       [x, y + 1]
     ] : [[x, y]];
     for (const [px, py] of dots) {
-      if (px >= MARGIN5 && px < WIDTH5 - MARGIN5 && py >= MARGIN5 && py < HEIGHT5 - MARGIN5) {
-        frame.pixels[py * WIDTH5 + px] = C5.sparkle;
+      if (px >= MARGIN7 && px < WIDTH7 - MARGIN7 && py >= MARGIN7 && py < HEIGHT7 - MARGIN7) {
+        frame.pixels[py * WIDTH7 + px] = C7.sparkle;
       }
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset3(pose);
-  renderSprite4(pose, traits).stampOnto(frame, ox, oy, MARGIN5);
+  renderSprite5(pose, traits).stampOnto(frame, ox, oy, MARGIN7);
   return frame.pixels;
 }
 var ghost = defineCritter({
@@ -2535,12 +3432,12 @@ var ghost = defineCritter({
   name: "Ghost",
   blurb: "Floats about, leaves sparkles, and stops once a loop to say boo.",
   alt: "Animated pixel art of a friendly ghost floating around the frame, leaving sparkles and stopping to say boo",
-  width: WIDTH5,
-  height: HEIGHT5,
-  frames: FRAMES5,
+  width: WIDTH7,
+  height: HEIGHT7,
+  frames: FRAMES7,
   delayMs: 60,
   poster: 12,
-  colourNames: COLOUR_NAMES5,
+  colourNames: COLOUR_NAMES7,
   bodyColour: "body",
   accentColours: ["sparkle"],
   fixedColours: ["eye", "white", "blush"],
@@ -2595,18 +3492,18 @@ var ghost = defineCritter({
       }
     }
   ],
-  draw: draw5
+  draw: draw7
 });
 
 // src/critters/jellyfish.ts
-var WIDTH6 = 180;
-var HEIGHT6 = 120;
-var FRAMES6 = 200;
-var MARGIN6 = 2;
+var WIDTH8 = 180;
+var HEIGHT8 = 120;
+var FRAMES8 = 200;
+var MARGIN8 = 2;
 var PULSES = 8;
 var MOTES = 30;
-var LOCAL5 = 110;
-var ORIGIN5 = LOCAL5 / 2;
+var LOCAL6 = 110;
+var ORIGIN5 = LOCAL6 / 2;
 var TOP2 = 34;
 var LOBES = 8;
 var TENTACLES = 7;
@@ -2621,7 +3518,7 @@ var WAYPOINTS5 = [
   [52, 58]
 ];
 var STRIPES = [12, -12, 9];
-var COLOUR_NAMES6 = [
+var COLOUR_NAMES8 = [
   "rim",
   "line",
   "bell",
@@ -2638,15 +3535,15 @@ var COLOUR_NAMES6 = [
   "blush",
   "mote"
 ];
-var C6 = colourIndexes(COLOUR_NAMES6);
-function buildPoses5({ mood, stage }) {
+var C8 = colourIndexes(COLOUR_NAMES8);
+function buildPoses7({ mood, stage }) {
   const k = STAGE_SCALE[stage];
-  const { x, y, vx } = roam(WAYPOINTS5, mood, FRAMES6);
+  const { x, y, vx } = roam(WAYPOINTS5, mood, FRAMES8);
   const tilt = smooth(vx.map((v) => clamp(v * 0.35, -0.3, 0.3)), 15);
-  const blinks = blinkFrames(mood, [40, 120], FRAMES6);
+  const blinks = blinkFrames(mood, [40, 120], FRAMES8);
   const pulses = cyclesFor(mood, PULSES);
-  return Array.from({ length: FRAMES6 }, (_, i) => {
-    const phase = TAU * pulses * i / FRAMES6;
+  return Array.from({ length: FRAMES8 }, (_, i) => {
+    const phase = TAU * pulses * i / FRAMES8;
     const squeeze = 0.5 - 0.5 * Math.cos(phase + 0.6 * Math.sin(phase));
     return {
       x: x[i],
@@ -2700,12 +3597,12 @@ function drawTentacles(canvas, pose, k, count) {
     }
     (t % 2 === 0 ? near : far).addLine(points);
   }
-  canvas.fill(far, C6.tentacleLo);
-  canvas.fill(near, C6.tentacle);
+  canvas.fill(far, C8.tentacleLo);
+  canvas.fill(near, C8.tentacle);
 }
 function drawArms2(canvas, pose, k) {
   const arms = canvas.mask();
-  const shade = canvas.mask();
+  const shade2 = canvas.mask();
   for (const [f, reach] of [
     [-0.42, 22],
     [0.4, 24],
@@ -2720,17 +3617,17 @@ function drawArms2(canvas, pose, k) {
       const x = ORIGIN5 + f * 12 * k * (1 - 0.3 * s) + wave + trail + frill;
       const y = TOP2 + k + s * length;
       arms.addDisc(x, y, (2.5 - 1.7 * s) * k);
-      if (n % 3 === 0) shade.addDisc(x + 0.6, y, 0.9 * k);
+      if (n % 3 === 0) shade2.addDisc(x + 0.6, y, 0.9 * k);
     }
   }
-  canvas.sticker(arms, C6.arm, C6.line);
-  canvas.fill(shade.and(arms), C6.armLo);
+  canvas.sticker(arms, C8.arm, C8.line);
+  canvas.fill(shade2.and(arms), C8.armLo);
 }
 function drawBell(canvas, pose, traits, k) {
   const bell = canvas.mask().addPolygon(bellOutline(pose, k, traits.stage < 2 ? 6 : LOBES));
-  canvas.sticker(bell, C6.bell, C6.line);
-  canvas.fill(bell.minus(bell.moved(0, -Math.max(2, round(3 * k)))), C6.bellLo);
-  canvas.fill(bell.minus(bell.moved(-1, 2)), C6.bellHi);
+  canvas.sticker(bell, C8.bell, C8.line);
+  canvas.fill(bell.minus(bell.moved(0, -Math.max(2, round(3 * k)))), C8.bellLo);
+  canvas.fill(bell.minus(bell.moved(-1, 2)), C8.bellHi);
   const cos = Math.cos(pose.tilt);
   const sin = Math.sin(pose.tilt);
   const place = (x, y) => [
@@ -2741,13 +3638,13 @@ function drawBell(canvas, pose, traits, k) {
   const inner = canvas.mask();
   const [ix, iy] = place(0, (-8 - 2 * pose.squeeze) * k);
   inner.addDisc(ix, iy, 7.2 * wide * k);
-  canvas.fill(inner.and(bell), C6.inner);
+  canvas.fill(inner.and(bell), C8.inner);
   const spots = canvas.mask();
   for (const dx of [-5.2, -1.8, 1.8, 5.2]) {
     const [sx, sy] = place(dx * wide * k, (-10 - 2 * pose.squeeze + Math.abs(dx) * 0.5) * k);
     spots.addDisc(sx, sy, 1.5 * k);
   }
-  canvas.fill(spots.and(bell), C6.spot);
+  canvas.fill(spots.and(bell), C8.spot);
   const stripes = canvas.mask();
   for (const across of STRIPES.slice(0, traits.marks)) {
     const [x0, y0] = place(across * wide * k, -9.5 * k);
@@ -2759,7 +3656,7 @@ function drawBell(canvas, pose, traits, k) {
       ]);
     }
   }
-  canvas.fill(stripes.and(bell), C6.spot);
+  canvas.fill(stripes.and(bell), C8.spot);
   const face = canvas.mask();
   const eye = (dx) => {
     const [ex, ey] = place(dx * wide * k, -3.4 * k);
@@ -2772,40 +3669,40 @@ function drawBell(canvas, pose, traits, k) {
   };
   const [lx, ly] = eye(-6);
   const [rx, ry] = eye(6);
-  canvas.fill(face, C6.eye);
+  canvas.fill(face, C8.eye);
   if (!pose.blink) {
     const glint = canvas.mask().addPixel(lx - 1, ly).addPixel(rx - 1, ry);
-    canvas.fill(glint, C6.white);
+    canvas.fill(glint, C8.white);
   }
   const blush = canvas.mask();
   for (const dx of [-10, 10]) {
     const [bx, by] = place(dx * wide * k, -1.4 * k);
     blush.addPixel(bx - 1, by).addPixel(bx, by).addPixel(bx + 1, by);
   }
-  canvas.fill(blush.and(bell), C6.blush);
+  canvas.fill(blush.and(bell), C8.blush);
   const smile = canvas.mask();
   const [mx, my] = place(0, -1.6 * k);
   smile.addPixel(mx - 2, my).addPixel(mx - 1, my + 1).addPixel(mx, my + 1).addPixel(mx + 1, my + 1).addPixel(mx + 2, my);
-  canvas.fill(smile, C6.line);
+  canvas.fill(smile, C8.line);
 }
-function renderSprite5(pose, traits) {
+function renderSprite6(pose, traits) {
   const k = STAGE_SCALE[traits.stage];
-  const canvas = new Canvas(LOCAL5, LOCAL5);
+  const canvas = new Canvas(LOCAL6, LOCAL6);
   drawTentacles(canvas, pose, k, traits.stage < 2 ? 5 : TENTACLES);
   drawArms2(canvas, pose, k);
   drawBell(canvas, pose, traits, k);
-  canvas.strengthenEdges([[C6.line, C6.rim]]);
+  canvas.strengthenEdges([[C8.line, C8.rim]]);
   return canvas;
 }
 function spriteOffset4(pose) {
   return [round(pose.x) - ORIGIN5, round(pose.y) - (TOP2 - 16)];
 }
-var prepare5 = perTraits((traits) => {
+var prepare7 = perTraits((traits) => {
   const k = STAGE_SCALE[traits.stage];
-  const poses = buildPoses5(traits);
+  const poses = buildPoses7(traits);
   const motes = makeSparks(
     MOTES,
-    FRAMES6,
+    FRAMES8,
     (birth) => {
       const pose = poses[birth];
       const [ox, oy] = spriteOffset4(pose);
@@ -2816,17 +3713,17 @@ var prepare5 = perTraits((traits) => {
   );
   return { poses, motes };
 });
-function draw6(index, traits) {
-  const { poses, motes } = prepare5(traits);
-  const frame = new Canvas(WIDTH6, HEIGHT6);
-  forEachSpark(motes, index, FRAMES6, (x, y) => {
-    if (x >= MARGIN6 && x < WIDTH6 - MARGIN6 && y >= MARGIN6 && y < HEIGHT6 - MARGIN6) {
-      frame.pixels[y * WIDTH6 + x] = C6.mote;
+function draw8(index, traits) {
+  const { poses, motes } = prepare7(traits);
+  const frame = new Canvas(WIDTH8, HEIGHT8);
+  forEachSpark(motes, index, FRAMES8, (x, y) => {
+    if (x >= MARGIN8 && x < WIDTH8 - MARGIN8 && y >= MARGIN8 && y < HEIGHT8 - MARGIN8) {
+      frame.pixels[y * WIDTH8 + x] = C8.mote;
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset4(pose);
-  renderSprite5(pose, traits).stampOnto(frame, ox, oy, MARGIN6);
+  renderSprite6(pose, traits).stampOnto(frame, ox, oy, MARGIN8);
   return frame.pixels;
 }
 var jellyfish = defineCritter({
@@ -2834,12 +3731,12 @@ var jellyfish = defineCritter({
   name: "Jellyfish",
   blurb: "Pulses gently across the frame, shedding little specks of glow.",
   alt: "Animated pixel art of a smiling jellyfish pulsing as it drifts around the frame, trailing long tentacles",
-  width: WIDTH6,
-  height: HEIGHT6,
-  frames: FRAMES6,
+  width: WIDTH8,
+  height: HEIGHT8,
+  frames: FRAMES8,
   delayMs: 60,
   poster: 24,
-  colourNames: COLOUR_NAMES6,
+  colourNames: COLOUR_NAMES8,
   bodyColour: "bell",
   accentColours: ["spot", "arm", "armLo", "tentacle", "tentacleLo", "mote"],
   fixedColours: ["eye", "white", "blush"],
@@ -2909,11 +3806,1215 @@ var jellyfish = defineCritter({
       }
     }
   ],
-  draw: draw6
+  draw: draw8
+});
+
+// src/critters/mushroom.ts
+var WIDTH9 = 180;
+var HEIGHT9 = 120;
+var FRAMES9 = 200;
+var MARGIN9 = 2;
+var HOPS2 = 8;
+var BREATHS3 = 7;
+var SWAYS = 5;
+var LOCAL7 = 90;
+var ORIGIN6 = LOCAL7 / 2;
+var CAP_WIDTH = 18;
+var CAP_HEIGHT = 13;
+var CAP_RIM = -3;
+var STEM_TOP = -4;
+var FEET2 = 13;
+var AMBIENT_SPORES = 20;
+var BURST_SPORES = 30;
+var SPORE_DRAG = 0.93;
+var CLOUD_FRAMES = 9;
+var ANCHOR = [92, 66];
+var HOLD_FROM = 94;
+var HOLD_TO = 134;
+var HOLD_EASE = 18;
+var CROUCH2 = 98;
+var LAUNCH = 108;
+var PEAK = 114;
+var LAND = 122;
+var SETTLED = 132;
+var BURST = 111;
+var GLOW_FROM = 106;
+var GLOW_TO = 128;
+var WAYPOINTS6 = [
+  [44, 56],
+  [74, 38],
+  [108, 50],
+  [140, 40],
+  [148, 70],
+  [116, 80],
+  [88, 62],
+  [58, 80],
+  [34, 70]
+];
+var SPOTS = [
+  [-9, -8.5, 3.6, 2.8],
+  [4, -11.5, 2.8, 2.2],
+  [11, -6.5, 3.2, 2.4]
+];
+var MARKS5 = [
+  [],
+  [[-2, -6.5]],
+  [
+    [-2, -6.5],
+    [-15, -5.5]
+  ],
+  [
+    [-2, -6.5],
+    [-15, -5.5],
+    [16, -4.5]
+  ]
+];
+var EYE_GAP3 = [1, 2, 2, 3];
+var COLOUR_NAMES9 = [
+  "rim",
+  "line",
+  "cap",
+  "capHi",
+  "capLo",
+  "spot",
+  "spotHi",
+  "stem",
+  "stemHi",
+  "stemLo",
+  "eye",
+  "white",
+  "blush",
+  "mouth",
+  "spore"
+];
+var C9 = colourIndexes(COLOUR_NAMES9);
+var smoothstep2 = (t) => t * t * (3 - 2 * t);
+var between = (i, from, to) => clamp((i - from) / (to - from), 0, 1);
+function holdAt(i) {
+  return smoothstep2(between(i, HOLD_FROM - HOLD_EASE, HOLD_FROM)) * (1 - smoothstep2(between(i, HOLD_TO, HOLD_TO + HOLD_EASE)));
+}
+function puffAt(i) {
+  if (i < CROUCH2 || i >= SETTLED) return { tall: 1, lift: 0 };
+  if (i < LAUNCH) return { tall: 1 - 0.22 * smoothstep2(between(i, CROUCH2, LAUNCH)), lift: 0 };
+  if (i < PEAK) {
+    const t2 = between(i, LAUNCH, PEAK);
+    return { tall: 0.78 + 0.4 * smoothstep2(t2), lift: 1 - (1 - t2) ** 2 };
+  }
+  if (i < LAND) {
+    const t2 = between(i, PEAK, LAND);
+    return { tall: 1.18 - 0.3 * smoothstep2(t2), lift: 1 - t2 * t2 };
+  }
+  const t = between(i, LAND, SETTLED);
+  return { tall: 1 - 0.12 * Math.cos(t * TAU * 1.5) * (1 - t), lift: 0 };
+}
+function buildPoses8({ mood, stage }) {
+  const k = STAGE_SCALE[stage];
+  const roamed = roam(WAYPOINTS6, mood, FRAMES9);
+  const x = roamed.x.map((v, i) => v + (ANCHOR[0] - v) * holdAt(i));
+  const y = roamed.y.map((v, i) => v + (ANCHOR[1] - v) * holdAt(i));
+  const vx = x.map((_, i) => (x[(i + 1) % FRAMES9] - x[(i + FRAMES9 - 1) % FRAMES9]) / 2);
+  const look = smooth(vx.map((v) => clamp(v * 2.4, -2 * k, 2 * k)), 13);
+  const lean = smooth(vx.map((v) => clamp(v * 1.2, -2 * k, 2 * k)), 21);
+  const blinks = blinkFrames(mood, [30, 62, 170], FRAMES9);
+  const hops = cyclesFor(mood, HOPS2);
+  const breaths = cyclesFor(mood, BREATHS3);
+  const sways = cyclesFor(mood, SWAYS);
+  return Array.from({ length: FRAMES9 }, (_, i) => {
+    const free = 1 - holdAt(i);
+    const phase = hops * i / FRAMES9;
+    const air = 4 * (phase % 1) * (1 - phase % 1);
+    const puff = puffAt(i);
+    return {
+      x: x[i],
+      y: y[i] - free * 6 * k * air - puff.lift * 7 * k + 0.9 * k * Math.sin(TAU * sways * i / FRAMES9),
+      look: look[i],
+      lean: lean[i],
+      tall: (1 + free * (0.1 * (2 * Math.sqrt(air) - 1)) + 0.035 * Math.sin(TAU * breaths * i / FRAMES9)) * puff.tall,
+      squeeze: i >= CROUCH2 + 2 && i < BURST,
+      open: i >= LAUNCH && i < LAND,
+      glow: i >= GLOW_FROM && i < GLOW_TO,
+      blink: blinks.has(i),
+      twinkle: i % 2 === 0
+    };
+  });
+}
+function addEllipse(mask, cx, cy, rx, ry) {
+  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
+    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+      if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) mask.addPixel(x, y);
+    }
+  }
+}
+function drawStem(canvas, pose, k) {
+  const stem = canvas.mask();
+  const base = FEET2 * k;
+  const sx = 1 / Math.sqrt(pose.tall);
+  const top = STEM_TOP * k;
+  const bottom = 11 * k;
+  for (let row = Math.floor(top * 0.5 - 12 * k); row <= base + 1; row++) {
+    const y = base - (base - row) / pose.tall;
+    if (y < top || y > bottom) continue;
+    const t = (y - top) / (bottom - top);
+    const round2 = Math.max(0, y - (bottom - 2.2 * k)) * 0.9;
+    const half = ((6.6 + 1.8 * t * t) * k - round2) * sx;
+    for (let x = Math.ceil(-half); x <= half; x++) stem.addPixel(ORIGIN6 + x, ORIGIN6 + row);
+  }
+  const feet = canvas.mask();
+  for (const side of [-1, 1]) {
+    addEllipse(feet, ORIGIN6 + side * 4.4 * k * sx, ORIGIN6 + base - 1.2 * k, Math.max(1.6, 2.6 * k) * sx, Math.max(1.3, 1.8 * k));
+  }
+  canvas.sticker(stem.add(feet), C9.stem, C9.line);
+  canvas.fill(feet.minus(stem), C9.stemLo);
+  canvas.fill(stem.minus(stem.moved(-2, 0)), C9.stemLo);
+  canvas.fill(stem.minus(stem.moved(1, 1)), C9.stemHi);
+  return stem;
+}
+function drawCap(canvas, pose, stem, k) {
+  const cap = canvas.mask();
+  const base = FEET2 * k;
+  const sx = 1 / Math.sqrt(pose.tall);
+  const rim = CAP_RIM * k;
+  const height = CAP_HEIGHT * k;
+  const width = CAP_WIDTH * k;
+  const shift = round(pose.lean);
+  for (let row = Math.floor(rim - height * 1.4); row <= rim + 2 * k + 1; row++) {
+    const y = base - (base - row) / pose.tall;
+    if (y > rim || rim - y > height) continue;
+    const dome = Math.sqrt(Math.max(0, 1 - ((rim - y) / height) ** 2));
+    const half = width * dome * sx;
+    for (let x = Math.ceil(-half); x <= half; x++) {
+      const across = Math.abs(x) / (width * sx);
+      if (y <= rim - 2.4 * k * (1 - across * across)) cap.addPixel(ORIGIN6 + x + shift, ORIGIN6 + row);
+    }
+  }
+  canvas.fill(stem.and(cap.moved(0, Math.max(2, round(3 * k)))), C9.stemLo);
+  canvas.sticker(cap, C9.cap, C9.line);
+  canvas.fill(cap.minus(cap.moved(-2, -2)), C9.capLo);
+  canvas.fill(cap.minus(cap.moved(1, 2)), C9.capHi);
+  canvas.fill(cap.minus(cap.moved(0, -2)), C9.capLo);
+  return cap;
+}
+function drawSpots(canvas, pose, cap, k, marks) {
+  const base = FEET2 * k;
+  const sx = 1 / Math.sqrt(pose.tall);
+  const shift = round(pose.lean);
+  const spots = canvas.mask();
+  const place = (across2, up2, rx, ry) => {
+    const row = base - (base - up2 * k) * pose.tall;
+    addEllipse(spots, ORIGIN6 + across2 * k * sx + shift, ORIGIN6 + row, Math.max(1.2, rx * k) * sx, Math.max(1, ry * k * pose.tall));
+  };
+  for (const [across2, up2, rx, ry] of SPOTS) place(across2, up2, rx, ry);
+  for (const [across2, up2] of MARKS5[marks]) place(across2, up2, 1.1, 0.9);
+  const inside = cap.minus(cap.grown().minus(cap)).minus(cap.minus(cap.moved(-1, -1))).minus(cap.minus(cap.moved(1, 1)));
+  const visible = spots.and(inside);
+  if (pose.glow) {
+    canvas.fill(visible.grown().and(cap).minus(visible), C9.spot);
+    canvas.fill(visible, C9.spotHi);
+  } else {
+    canvas.fill(visible, C9.spot);
+    canvas.fill(visible.minus(visible.moved(1, 1)), C9.spotHi);
+  }
+  const [across, up] = SPOTS[0];
+  const twinkle = canvas.mask().addPixel(ORIGIN6 + round(across * k * sx) + shift, ORIGIN6 + round(base - (base - up * k) * pose.tall));
+  canvas.fill(twinkle.and(visible), pose.twinkle === pose.glow ? C9.spot : C9.spotHi);
+}
+function drawFace3(canvas, pose, stem, k, stage) {
+  const cx = ORIGIN6 + round(pose.look);
+  const base = FEET2 * k;
+  const cy = ORIGIN6 + round(base - (base - 2.4 * k) * pose.tall);
+  const gap = EYE_GAP3[stage];
+  const tall = stage === 0 ? 2 : 3;
+  const eyes = canvas.mask();
+  const glints = canvas.mask();
+  for (const side of [-1, 1]) {
+    const left = side < 0 ? cx - gap - 2 : cx + gap;
+    if (pose.squeeze) {
+      if (side < 0) eyes.addPixel(left, cy + 1).addPixel(left + 1, cy);
+      else eyes.addPixel(left, cy).addPixel(left + 1, cy + 1);
+      continue;
+    }
+    if (pose.blink) {
+      eyes.addPixel(left, cy + 1).addPixel(left + 1, cy + 1);
+      continue;
+    }
+    for (let y = 0; y < tall; y++) {
+      eyes.addPixel(left, cy + y).addPixel(left + 1, cy + y);
+    }
+    glints.addPixel(left, cy);
+  }
+  canvas.fill(eyes.and(stem), C9.eye);
+  canvas.fill(glints.and(stem), C9.white);
+  const blush = canvas.mask();
+  for (const side of [-1, 1]) {
+    const bx = side < 0 ? cx - gap - 4 : cx + gap + 3;
+    blush.addPixel(bx, cy + tall).addPixel(bx + 1, cy + tall);
+  }
+  if (stage > 0) canvas.fill(blush.and(stem), C9.blush);
+  const mouth = canvas.mask();
+  const my = cy + tall + (stage === 0 ? 1 : 2);
+  if (pose.open) {
+    mouth.addPixel(cx - 1, my).addPixel(cx, my).addPixel(cx - 1, my + 1).addPixel(cx, my + 1);
+    canvas.fill(mouth.and(stem), C9.mouth);
+  } else if (stage > 0) {
+    mouth.addPixel(cx - 1, my).addPixel(cx, my + 1).addPixel(cx + 1, my);
+    canvas.fill(mouth.and(stem), C9.mouth);
+  } else {
+    mouth.addPixel(cx, my);
+    canvas.fill(mouth.and(stem), C9.mouth);
+  }
+}
+function renderSprite7(pose, traits) {
+  const k = STAGE_SCALE[traits.stage];
+  const canvas = new Canvas(LOCAL7, LOCAL7);
+  const stem = drawStem(canvas, pose, k);
+  drawFace3(canvas, pose, stem, k, traits.stage);
+  const cap = drawCap(canvas, pose, stem, k);
+  drawSpots(canvas, pose, cap, k, traits.marks);
+  canvas.strengthenEdges([[C9.line, C9.rim]]);
+  return canvas;
+}
+function spriteOffset5(pose) {
+  return [round(pose.x) - ORIGIN6, round(pose.y) - ORIGIN6];
+}
+function makeBurst(poses, k) {
+  return Array.from({ length: BURST_SPORES }, (_, n) => {
+    const birth = BURST + n % 3;
+    const pose = poses[birth];
+    const angle = -Math.PI * (0.04 + 0.92 * (n * 0.618034 % 1));
+    const speed = (0.7 + 1.9 * (n * 7 % 11) / 10) * k;
+    return {
+      birth,
+      life: 36 + round(scatter(n + 1, 0.56984) * 28),
+      x: pose.x + Math.cos(angle) * 4 * k,
+      y: pose.y - 14 * k + Math.sin(angle) * 3 * k,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed
+    };
+  });
+}
+function burstAt(spore, age) {
+  const travelled = (1 - SPORE_DRAG ** age) / (1 - SPORE_DRAG);
+  return [round(spore.x + spore.vx * travelled), round(spore.y + spore.vy * travelled + 0.012 * age * age)];
+}
+var prepare8 = perTraits((traits) => {
+  const k = STAGE_SCALE[traits.stage];
+  const poses = buildPoses8(traits);
+  const ambient = makeSparks(
+    AMBIENT_SPORES,
+    FRAMES9,
+    (birth) => {
+      const pose = poses[birth];
+      const side = birth % 2 === 0 ? -1 : 1;
+      return [pose.x + side * (3 + birth % 9) * k, pose.y - 14 * k];
+    },
+    { life: [22, 40], vx: [-0.2, 0.2], vy: [-0.5, -0.2] }
+  );
+  return { poses, ambient, burst: makeBurst(poses, k) };
+});
+function draw9(index, traits) {
+  const { poses, ambient, burst } = prepare8(traits);
+  const frame = new Canvas(WIDTH9, HEIGHT9);
+  const put = (x, y) => {
+    if (x >= MARGIN9 && x < WIDTH9 - MARGIN9 && y >= MARGIN9 && y < HEIGHT9 - MARGIN9) frame.pixels[y * WIDTH9 + x] = C9.spore;
+  };
+  forEachSpark(ambient, index, FRAMES9, (x, y, age) => {
+    put(x, y);
+    if (age < 0.5) put(x, y - 1);
+  });
+  for (const spore of burst) {
+    const age = (index - spore.birth + FRAMES9) % FRAMES9;
+    if (age >= spore.life) continue;
+    const [x, y] = burstAt(spore, age);
+    put(x, y);
+    if (age < spore.life * 0.5) {
+      put(x - 1, y);
+      put(x + 1, y);
+      put(x, y - 1);
+      put(x, y + 1);
+    }
+  }
+  const since = index - BURST;
+  if (since >= 0 && since < CLOUD_FRAMES) {
+    const k = STAGE_SCALE[traits.stage];
+    const { x, y } = poses[BURST];
+    const radius = (3 + since * 0.9) * k + 1;
+    for (let dy = -Math.ceil(radius); dy <= Math.ceil(radius); dy++) {
+      for (let dx = -Math.ceil(radius * 1.5); dx <= Math.ceil(radius * 1.5); dx++) {
+        if ((dx / 1.5) ** 2 + dy ** 2 <= radius * radius && (dx + dy + since) % 2 === 0) {
+          put(round(x) + dx, round(y - 14 * k) + dy);
+        }
+      }
+    }
+  }
+  const pose = poses[index];
+  const [ox, oy] = spriteOffset5(pose);
+  renderSprite7(pose, traits).stampOnto(frame, ox, oy, MARGIN9);
+  return frame.pixels;
+}
+var mushroom = defineCritter({
+  id: "mushroom",
+  name: "Mushroom",
+  blurb: "Hops about, and once a loop stops to puff out a cloud of sparkly spores.",
+  alt: "Animated pixel art of a mushroom with a spotted cap hopping around the frame, then stopping to puff out a cloud of sparkly spores",
+  width: WIDTH9,
+  height: HEIGHT9,
+  frames: FRAMES9,
+  delayMs: 60,
+  poster: 118,
+  colourNames: COLOUR_NAMES9,
+  bodyColour: "cap",
+  accentColours: ["spot", "spotHi", "spore"],
+  fixedColours: ["stem", "stemHi", "stemLo", "eye", "white", "blush", "mouth"],
+  edgeColours: ["rim", "spore"],
+  colourways: [
+    {
+      id: "umber",
+      name: "Umber",
+      colours: {
+        rim: "#8f5a33",
+        line: "#4a2a16",
+        cap: "#a8683a",
+        capHi: "#c68850",
+        capLo: "#7c4826",
+        spot: "#f1dfbb",
+        spotHi: "#fff7e4",
+        stem: "#efe1ca",
+        stemHi: "#fcf6ea",
+        stemLo: "#d4be9f",
+        eye: "#2d1b10",
+        white: "#ffffff",
+        blush: "#f0a08a",
+        mouth: "#7a4330",
+        spore: "#cf9a55"
+      }
+    },
+    {
+      id: "glowcap",
+      name: "Glowcap",
+      colours: {
+        rim: "#2a9e92",
+        line: "#0f2a3a",
+        cap: "#245770",
+        capHi: "#32798f",
+        capLo: "#173d52",
+        spot: "#4cecd0",
+        spotHi: "#dffff8",
+        stem: "#d3e8ea",
+        stemHi: "#effafa",
+        stemLo: "#a9c8cd",
+        eye: "#10283a",
+        white: "#ffffff",
+        blush: "#8fe0d6",
+        mouth: "#2c6070",
+        spore: "#2fc2ab"
+      }
+    },
+    {
+      id: "amethyst",
+      name: "Amethyst",
+      colours: {
+        rim: "#7a58b3",
+        line: "#35205a",
+        cap: "#8059b8",
+        capHi: "#9e7cd2",
+        capLo: "#5c3d90",
+        spot: "#f6dcff",
+        spotHi: "#ffffff",
+        stem: "#f1e6ee",
+        stemHi: "#fdf8fb",
+        stemLo: "#d6c3d3",
+        eye: "#2a1844",
+        white: "#ffffff",
+        blush: "#f2a3bf",
+        mouth: "#6e3f78",
+        spore: "#b98be6"
+      }
+    }
+  ],
+  draw: draw9
+});
+
+// src/critters/robot.ts
+var WIDTH10 = 180;
+var HEIGHT10 = 120;
+var FRAMES10 = 200;
+var MARGIN10 = 2;
+var BOBS3 = 6;
+var SWAY_CYCLES2 = 3;
+var GLOW_CYCLES = 5;
+var JET_CYCLES = 20;
+var ARM_CYCLES = 6;
+var PINGS = 3;
+var SPARKS = 34;
+var LOCAL8 = 90;
+var ORIGIN7 = LOCAL8 / 2;
+var BEEP_START = 104;
+var BEEP_END = 130;
+var WAYPOINTS7 = [
+  [40, 66],
+  [70, 48],
+  [104, 62],
+  [138, 46],
+  [146, 74],
+  [112, 80],
+  [90, 62],
+  [60, 78],
+  [34, 72]
+];
+var MARKS6 = [[], [0], [-3, 3], [-4, 0, 4]];
+var EYE_GAP4 = [2, 3, 3, 4];
+var EYE_WIDTH2 = [1, 2, 2, 2];
+var EYE_HEIGHT2 = [2, 3, 3, 4];
+var SMALL_HEART = ["XX.XX", "XXXXX", ".XXX.", "..X.."];
+var BIG_HEART = [".XX.XX.", "XXXXXXX", "XXXXXXX", ".XXXXX.", "..XXX..", "...X..."];
+var COLOUR_NAMES10 = [
+  "rim",
+  "line",
+  "body",
+  "bodyHi",
+  "bodyLo",
+  "steel",
+  "steelLo",
+  "screen",
+  "eye",
+  "white",
+  "heart",
+  "glow",
+  "glowHi"
+];
+var C10 = colourIndexes(COLOUR_NAMES10);
+function buildPoses9({ mood, stage }) {
+  const k = STAGE_SCALE[stage];
+  const { x, y, vx } = roam(WAYPOINTS7, mood, FRAMES10);
+  const look = smooth(vx.map((v) => clamp(v * 3.4, -3 * k, 3 * k)), 13);
+  const lean = smooth(vx.map((v) => clamp(v * 1.8, -2 * k, 2 * k)), 21);
+  const blinks = blinkFrames(mood, [30, 60, 170], FRAMES10);
+  const bobs = cyclesFor(mood, BOBS3);
+  const sway = cyclesFor(mood, SWAY_CYCLES2);
+  const glow = cyclesFor(mood, GLOW_CYCLES);
+  const jet = cyclesFor(mood, JET_CYCLES);
+  const arm = cyclesFor(mood, ARM_CYCLES);
+  return Array.from({ length: FRAMES10 }, (_, i) => {
+    const beeping = i >= BEEP_START && i <= BEEP_END;
+    const progress = beeping ? (i - BEEP_START) / (BEEP_END - BEEP_START) : 0;
+    const hop = beeping ? 5 * k * Math.sin(Math.PI * progress) : 0;
+    return {
+      x: x[i],
+      y: y[i] + 2.4 * k * Math.sin(TAU * bobs * i / FRAMES10) - hop,
+      look: look[i],
+      lean: lean[i],
+      wiggle: beeping ? 1.5 * k * Math.sin(TAU * PINGS * progress) : 0,
+      sway: 1.6 * k * Math.sin(TAU * sway * i / FRAMES10),
+      beep: beeping ? clamp(Math.min(i - BEEP_START, BEEP_END - i) / 4, 0, 1) : 0,
+      ping: beeping ? progress * PINGS % 1 : -1,
+      jet: TAU * jet * i / FRAMES10,
+      flicker: i % 2 === 0 ? 0 : 1,
+      arm: TAU * arm * i / FRAMES10,
+      lit: beeping || Math.sin(TAU * glow * i / FRAMES10) > 0,
+      blink: blinks.has(i)
+    };
+  });
+}
+function roundRect(mask, x0, y0, x1, y1, radius) {
+  for (let y = y0; y < y1; y++) {
+    const fromEdge = Math.min(y - y0, y1 - 1 - y);
+    const inset = fromEdge >= radius ? 0 : round(radius - Math.sqrt(radius * radius - (radius - fromEdge - 0.5) ** 2));
+    for (let x = x0 + inset; x < x1 - inset; x++) mask.addPixel(x, y);
+  }
+  return mask;
+}
+function shade(canvas, shape, low, high) {
+  canvas.fill(shape.minus(shape.moved(-2, -2)), low);
+  canvas.fill(shape.minus(shape.moved(1, 2)), high);
+}
+function renderSprite8(pose, traits) {
+  const { stage, marks } = traits;
+  const k = STAGE_SCALE[stage];
+  const s = (v) => round(v * k);
+  const canvas = new Canvas(LOCAL8, LOCAL8);
+  const headX = ORIGIN7 + round(pose.lean / 2) + round(pose.wiggle);
+  const baseX = ORIGIN7 - round(pose.lean / 2);
+  const box2 = (centre, half, top, bottom, radius2) => roundRect(canvas.mask(), centre - s(half), ORIGIN7 + s(top), centre + s(half), ORIGIN7 + s(bottom), Math.max(1, s(radius2)));
+  const padBottom = ORIGIN7 + s(19);
+  const flameLength = Math.max(2, round((3 + 1.5 * Math.sin(pose.jet)) * k));
+  const flame = canvas.mask();
+  const core = canvas.mask();
+  for (let row = 0; row < flameLength; row++) {
+    const half = Math.round(s(3) * (1 - row / flameLength));
+    for (let x = -half; x <= half; x++) flame.addPixel(baseX + x, padBottom + 1 + row);
+    if (row < flameLength - 1 && (row > 0 || pose.flicker === 0)) core.addPixel(baseX, padBottom + 1 + row);
+  }
+  canvas.fill(flame, C10.glow);
+  canvas.fill(core, C10.glowHi);
+  const pad = box2(baseX, 7, 16, 19, 1.5);
+  canvas.sticker(pad, C10.steel, C10.line);
+  canvas.fill(pad.minus(pad.moved(0, -1)), C10.steelLo);
+  const body = box2(baseX, 9, 2, 16, 4);
+  canvas.sticker(body, C10.body, C10.line);
+  shade(canvas, body, C10.bodyLo, C10.bodyHi);
+  const panel = box2(baseX, 5, 6, 13, 1);
+  canvas.fill(panel, C10.steel);
+  canvas.fill(panel.minus(panel.moved(0, -1)), C10.steelLo);
+  const lights = canvas.mask();
+  const lightSize = stage < 2 ? 1 : 2;
+  for (const dx of MARKS6[marks]) {
+    const x = baseX + s(dx) - (lightSize === 2 ? 1 : 0);
+    const y = ORIGIN7 + s(9) - (lightSize === 2 ? 1 : 0);
+    for (let n = 0; n < lightSize; n++) for (let m = 0; m < lightSize; m++) lights.addPixel(x + n, y + m);
+  }
+  canvas.fill(lights, C10.glow);
+  const arms = canvas.mask();
+  for (const side of [-1, 1]) {
+    const shoulderX = baseX + side * s(10);
+    const shoulderY = ORIGIN7 + s(6);
+    const swing = 1.3 * k * Math.sin(pose.arm + (side > 0 ? Math.PI : 0));
+    const handX = baseX + side * s(13.5 + 4 * pose.beep);
+    const handY = ORIGIN7 + s(14) + round(swing) - round(9 * k * pose.beep);
+    const steps = 8;
+    for (let n = 0; n <= steps; n++) {
+      const t = n / steps;
+      arms.addDisc(shoulderX + (handX - shoulderX) * t, shoulderY + (handY - shoulderY) * t, Math.max(1.2, 2.1 * k));
+    }
+  }
+  canvas.sticker(arms, C10.steel, C10.line);
+  canvas.fill(arms.minus(arms.moved(-1, -1)), C10.steelLo);
+  const ears = canvas.mask();
+  for (const side of [-1, 1]) {
+    ears.add(
+      roundRect(
+        canvas.mask(),
+        side > 0 ? headX + s(13) : headX - s(16),
+        ORIGIN7 + s(-11),
+        side > 0 ? headX + s(16) : headX - s(13),
+        ORIGIN7 + s(-4),
+        1
+      )
+    );
+  }
+  canvas.sticker(ears, C10.steel, C10.line);
+  canvas.fill(ears.minus(ears.moved(-1, 0)), C10.steelLo);
+  const head = box2(headX, 14, -17, 3, 5);
+  canvas.sticker(head, C10.body, C10.line);
+  shade(canvas, head, C10.bodyLo, C10.bodyHi);
+  const screen = box2(headX, 10, -13, -1, 2);
+  canvas.fill(screen, C10.screen);
+  drawFace4(canvas, pose, headX, s, stage);
+  const tipX = headX + round(pose.sway);
+  const tipY = ORIGIN7 + s(-25);
+  const stalk = canvas.mask().addLine([
+    [headX, ORIGIN7 + s(-17)],
+    [tipX, tipY]
+  ]);
+  canvas.sticker(stalk, C10.steel, C10.line);
+  const radius = Math.max(1.6, 2.8 * k) + pose.beep * k;
+  const tip = canvas.mask().addDisc(tipX, tipY, radius);
+  canvas.sticker(tip, C10.glow, C10.line);
+  if (pose.lit) canvas.fill(canvas.mask().addDisc(tipX, tipY, Math.max(0.9, 1.1 * k)), C10.glowHi);
+  if (pose.ping >= 0) {
+    const ring = canvas.mask();
+    const reach = radius + 2 + 3.5 * k * pose.ping;
+    for (let n = 0; n < 8; n++) {
+      const angle = Math.PI * n / 4;
+      ring.addPixel(tipX + round(Math.cos(angle) * reach), tipY + round(Math.sin(angle) * reach));
+    }
+    canvas.fill(ring, C10.glow);
+  }
+  canvas.strengthenEdges([[C10.line, C10.rim]]);
+  return canvas;
+}
+function drawFace4(canvas, pose, headX, s, stage) {
+  const cx = headX + round(pose.look);
+  const top = ORIGIN7 + s(-9);
+  const width = EYE_WIDTH2[stage];
+  const height = EYE_HEIGHT2[stage];
+  const gap = EYE_GAP4[stage];
+  if (pose.beep > 0.5) {
+    const art = stage < 2 ? SMALL_HEART : BIG_HEART;
+    const heart = canvas.mask();
+    const glint = canvas.mask();
+    art.forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        if (row[x] === "X") heart.addPixel(headX - (row.length >> 1) + x, top - 1 + y);
+      }
+    });
+    glint.addPixel(headX - (art[0].length >> 1) + 1, top);
+    canvas.fill(heart, C10.heart);
+    canvas.fill(glint, C10.white);
+    return;
+  }
+  const eyes = canvas.mask();
+  const glints = canvas.mask();
+  for (const side of [-1, 1]) {
+    const left = side < 0 ? cx - gap - width + 1 : cx + gap;
+    if (pose.blink) {
+      for (let x = 0; x < width; x++) eyes.addPixel(left + x, top + (height >> 1));
+      continue;
+    }
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) eyes.addPixel(left + x, top + y);
+    if (stage >= 2) glints.addPixel(left, top);
+  }
+  canvas.fill(eyes, C10.eye);
+  canvas.fill(glints, C10.white);
+  if (stage >= 1) {
+    const mouth = canvas.mask();
+    const y = top + height + (stage < 2 ? 1 : 2);
+    if (stage < 2) {
+      for (let x = -1; x <= 1; x++) mouth.addPixel(cx + x, y);
+    } else {
+      mouth.addPixel(cx - 2, y - 1).addPixel(cx - 1, y).addPixel(cx, y).addPixel(cx + 1, y).addPixel(cx + 2, y - 1);
+    }
+    canvas.fill(mouth, C10.eye);
+  }
+}
+function spriteOffset6(pose) {
+  return [round(pose.x) - ORIGIN7, round(pose.y) - ORIGIN7];
+}
+var prepare9 = perTraits((traits) => {
+  const k = STAGE_SCALE[traits.stage];
+  const poses = buildPoses9(traits);
+  const sparks = makeSparks(
+    SPARKS,
+    FRAMES10,
+    (birth) => {
+      const pose = poses[birth];
+      return [pose.x + (birth % 5 - 2) * k, pose.y + 24 * k];
+    },
+    { life: [8, 16], vx: [-0.12, 0.12], vy: [0.3, 0.6] }
+  );
+  return { poses, sparks };
+});
+function draw10(index, traits) {
+  const { poses, sparks } = prepare9(traits);
+  const frame = new Canvas(WIDTH10, HEIGHT10);
+  forEachSpark(sparks, index, FRAMES10, (x, y, age) => {
+    const dots = age < 0.5 ? [[x, y], [x, y + 1]] : [[x, y]];
+    for (const [px, py] of dots) {
+      if (px >= MARGIN10 && px < WIDTH10 - MARGIN10 && py >= MARGIN10 && py < HEIGHT10 - MARGIN10) {
+        frame.pixels[py * WIDTH10 + px] = C10.glow;
+      }
+    }
+  });
+  const pose = poses[index];
+  const [ox, oy] = spriteOffset6(pose);
+  renderSprite8(pose, traits).stampOnto(frame, ox, oy, MARGIN10);
+  return frame.pixels;
+}
+var robot = defineCritter({
+  id: "robot",
+  name: "Little robot",
+  blurb: "Hovers about, and stops once a loop to beep and show a heart.",
+  alt: "Animated pixel art of a little hovering robot with a screen for a face, drifting around the frame and stopping to beep and show a heart",
+  width: WIDTH10,
+  height: HEIGHT10,
+  frames: FRAMES10,
+  delayMs: 60,
+  poster: 12,
+  colourNames: COLOUR_NAMES10,
+  bodyColour: "body",
+  accentColours: ["glow", "glowHi"],
+  fixedColours: ["steel", "steelLo", "screen", "eye", "white", "heart"],
+  edgeColours: ["rim", "glow"],
+  colourways: [
+    {
+      id: "cobalt",
+      name: "Cobalt",
+      colours: {
+        rim: "#4d6ad0",
+        line: "#26346e",
+        body: "#7ea6ff",
+        bodyHi: "#b9d0ff",
+        bodyLo: "#5379d9",
+        steel: "#c9d0dc",
+        steelLo: "#8d97ab",
+        screen: "#141c2e",
+        eye: "#7dffe3",
+        white: "#ffffff",
+        heart: "#ff6b9a",
+        glow: "#f58a2a",
+        glowHi: "#ffe3a8"
+      }
+    },
+    {
+      id: "copper",
+      name: "Copper",
+      colours: {
+        rim: "#bf6234",
+        line: "#6e3320",
+        body: "#f2a074",
+        bodyHi: "#ffd2b4",
+        bodyLo: "#d77548",
+        steel: "#d6d2cc",
+        steelLo: "#9b948b",
+        screen: "#1f1a1c",
+        eye: "#fff27a",
+        white: "#ffffff",
+        heart: "#ff6b9a",
+        glow: "#1fb5a8",
+        glowHi: "#b8fff2"
+      }
+    },
+    {
+      id: "lemon",
+      name: "Lemon",
+      colours: {
+        rim: "#b08a14",
+        line: "#6b5410",
+        body: "#ffd84a",
+        bodyHi: "#fff0a0",
+        bodyLo: "#e5ad22",
+        steel: "#cfd3d8",
+        steelLo: "#8f959e",
+        screen: "#1c1a2e",
+        eye: "#ff9ee6",
+        white: "#ffffff",
+        heart: "#ff6b9a",
+        glow: "#8a63e8",
+        glowHi: "#ddd0ff"
+      }
+    }
+  ],
+  draw: draw10
+});
+
+// src/critters/turtle.ts
+var WIDTH11 = 180;
+var HEIGHT11 = 120;
+var FRAMES11 = 200;
+var MARGIN11 = 2;
+var BUBBLES3 = 20;
+var LOCAL9 = 80;
+var ORIGIN8 = LOCAL9 / 2;
+var SHELL_RX = 17;
+var SHELL_RY = 12;
+var PLASTRON = 3;
+var STRIDE = 9;
+var TAIL_WAGS = 7;
+var DUCK_START = 92;
+var DUCK_END = 102;
+var POP_START = 114;
+var POP_END = 121;
+var HOP_END = 130;
+var HAPPY_START = 117;
+var HAPPY_END = 150;
+var STILL_FROM = 96;
+var STILL_TO = 130;
+var STILL_EASE = 8;
+var WAYPOINTS8 = [
+  [58, 70],
+  [78, 46],
+  [108, 40],
+  [130, 58],
+  [116, 84],
+  [84, 88]
+];
+var MARKS7 = [
+  [],
+  [[0, -7]],
+  [
+    [-6, -4],
+    [6, -4]
+  ],
+  [
+    [-9, -4],
+    [0, -8],
+    [9, -4]
+  ]
+];
+var PLATES = [
+  [-12, -8],
+  [0, -8],
+  [12, -8],
+  [-18, -2.5],
+  [-6, -2.5],
+  [6, -2.5],
+  [18, -2.5]
+];
+var COLOUR_NAMES11 = [
+  "rim",
+  "line",
+  "shell",
+  "shellHi",
+  "shellLo",
+  "scute",
+  "scuteHi",
+  "plastron",
+  "plastronLo",
+  "skin",
+  "skinHi",
+  "skinLo",
+  "eye",
+  "white",
+  "blush",
+  "mouth",
+  "bubble"
+];
+var C11 = colourIndexes(COLOUR_NAMES11);
+var ease = (t) => {
+  const u = clamp(t, 0, 1);
+  return u * u * (3 - 2 * u);
+};
+function tuck(i) {
+  if (i < POP_START) return ease((i - DUCK_START) / (DUCK_END - DUCK_START));
+  return 1 - ease((i - POP_START) / (POP_END - POP_START));
+}
+function headOut(i) {
+  const tucked = tuck(i);
+  const overshoot = i >= POP_START ? 0.16 * Math.sin(Math.PI * clamp((i - POP_START) / (HOP_END - POP_START), 0, 1)) : 0;
+  return 1 - tucked + overshoot * (1 - tucked);
+}
+function pace() {
+  const rate = new Float64Array(FRAMES11);
+  for (let i = 0; i < FRAMES11; i++) {
+    const into = ease((i - STILL_FROM) / STILL_EASE);
+    const out = ease((STILL_TO - i) / STILL_EASE);
+    rate[i] = 1 - Math.min(into, out);
+  }
+  return rate;
+}
+function sample(values, at) {
+  const n = values.length;
+  const low = Math.floor(at);
+  const f = at - low;
+  return values[(low % n + n) % n] * (1 - f) + values[((low + 1) % n + n) % n] * f;
+}
+function buildPoses10({ mood }) {
+  const path = roam(WAYPOINTS8, mood, FRAMES11);
+  const rate = pace();
+  const total = rate.reduce((sum2, v) => sum2 + v, 0);
+  const progress = new Float64Array(FRAMES11);
+  let sum = 0;
+  for (let i = 0; i < FRAMES11; i++) {
+    progress[i] = sum * FRAMES11 / total;
+    sum += rate[i];
+  }
+  const x = progress.map((p) => sample(path.x, p));
+  const y = progress.map((p) => sample(path.y, p));
+  const vx = new Float64Array(FRAMES11);
+  const speed = new Float64Array(FRAMES11);
+  for (let i = 0; i < FRAMES11; i++) {
+    const next = (i + 1) % FRAMES11;
+    const previous = (i - 1 + FRAMES11) % FRAMES11;
+    vx[i] = (x[next] - x[previous]) / 2;
+    speed[i] = Math.hypot(x[next] - x[i], y[next] - y[i]);
+  }
+  const heading = smooth(vx, 9);
+  const facing = new Array(FRAMES11);
+  const first = heading.findIndex((v) => Math.abs(v) > 0.05);
+  let face = heading[first] > 0 ? 1 : -1;
+  for (let n = 0; n < FRAMES11; n++) {
+    const i = (first + n) % FRAMES11;
+    if (Math.abs(heading[i]) > 0.05) face = heading[i] > 0 ? 1 : -1;
+    facing[i] = face;
+  }
+  const distance = speed.reduce((s, v) => s + v, 0);
+  const steps = Math.max(1, round(distance / STRIDE));
+  const step2 = cumulativePhase(speed, steps);
+  const blinks = blinkFrames(mood, [30, 64, 168], FRAMES11);
+  const wags = cyclesFor(mood, TAIL_WAGS);
+  return Array.from({ length: FRAMES11 }, (_, i) => {
+    const hop = i >= POP_START && i <= HOP_END ? Math.sin(Math.PI * (i - POP_START) / (HOP_END - POP_START)) : 0;
+    const tremble = tuck(i) > 0.95 ? [0, 1, 0, -1][i % 4] : 0;
+    return {
+      x: x[i] + tremble,
+      y: y[i] - 5 * hop,
+      facing: facing[i],
+      out: headOut(i),
+      legs: 1 - ease((tuck(i) - 0.15) / 0.6),
+      step: step2[i],
+      wag: TAU * wags * i / FRAMES11,
+      happy: i >= HAPPY_START && i <= HAPPY_END,
+      blink: blinks.has(i) && tuck(i) === 0
+    };
+  });
+}
+function shellMasks(canvas, k) {
+  const dome = canvas.mask();
+  const plastron = canvas.mask();
+  const rx = SHELL_RX * k;
+  const ry = Math.max(4, round(SHELL_RY * k));
+  const base = Math.max(2, round(PLASTRON * k));
+  for (let y = -ry; y < 0; y++) {
+    const half = Math.floor(rx * Math.sqrt(Math.max(0, 1 - ((y + 0.5) / ry) ** 2)) + 0.5);
+    for (let x = -half; x <= half; x++) dome.addPixel(ORIGIN8 + x, ORIGIN8 + y);
+  }
+  for (let row = 0; row < base; row++) {
+    const half = Math.floor(rx - 1.5 - (row === base - 1 ? 2 : 0));
+    for (let x = -half; x <= half; x++) plastron.addPixel(ORIGIN8 + x, ORIGIN8 + row);
+  }
+  return { dome, plastron };
+}
+function drawShell2(canvas, k) {
+  const { dome, plastron } = shellMasks(canvas, k);
+  const whole = canvas.mask().add(dome).add(plastron);
+  canvas.sticker(whole, C11.shell, C11.line);
+  const plates = canvas.mask();
+  const seams = canvas.mask();
+  const spread = Math.max(k, 0.8);
+  const centres = PLATES.map(([dx, dy]) => [ORIGIN8 + dx * spread, ORIGIN8 + dy * k]);
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      if (!dome.bits[y * canvas.width + x]) continue;
+      let best = Infinity;
+      let next = Infinity;
+      for (const [cx, cy] of centres) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d < best) {
+          next = best;
+          best = d;
+        } else if (d < next) next = d;
+      }
+      if (next - best < (k < 0.7 ? 0.9 : 1.3)) seams.addPixel(x, y);
+      else plates.addPixel(x, y);
+    }
+  }
+  const inner = dome.moved(1, 0).and(dome.moved(-1, 0)).and(dome.moved(0, 1)).and(dome.moved(0, -1));
+  const rim = dome.minus(inner);
+  canvas.fill(plates.and(inner), C11.scute);
+  canvas.fill(seams.and(inner), C11.shellLo);
+  canvas.fill(plates.and(inner).minus(plates.moved(1, 1)), C11.scuteHi);
+  canvas.fill(rim, C11.shell);
+  canvas.fill(dome.minus(dome.moved(1, 2)), C11.shellHi);
+  canvas.fill(plastron, C11.plastron);
+  canvas.fill(plastron.minus(plastron.moved(0, -1)), C11.plastronLo);
+  canvas.fill(plastron.minus(plastron.moved(0, 1)), C11.shellLo);
+  return dome;
+}
+function drawStuds(canvas, k, marks) {
+  const studs = canvas.mask();
+  for (const [dx, dy] of MARKS7[marks]) {
+    const x = ORIGIN8 + round(dx * k);
+    const y = ORIGIN8 + round(dy * k);
+    studs.addPixel(x, y).addPixel(x - 1, y).addPixel(x + 1, y);
+    if (k >= 0.7) studs.addPixel(x, y - 1).addPixel(x, y + 1);
+  }
+  canvas.fill(studs, C11.white);
+}
+function drawLegs(canvas, pose, k, near) {
+  if (pose.legs < 0.2) return;
+  const legs = canvas.mask();
+  const radius = Math.max(1.5, 2.6 * k);
+  for (const front of [1, -1]) {
+    const hipX = (near ? 11 : 7) * k * front;
+    const phase = pose.step + (near === (front === 1) ? 0 : Math.PI);
+    const swing = 3.5 * k * Math.sin(phase);
+    const lift = 1.7 * k * Math.max(0, Math.cos(phase));
+    const reach = (5.6 * k - lift) * pose.legs;
+    const hipY = -1.5 * k;
+    for (let n = 0; n <= 4; n++) {
+      const s = n / 4;
+      legs.addDisc(ORIGIN8 + hipX + swing * s, ORIGIN8 + hipY + reach * s + 0.5, radius * (1 - 0.15 * s));
+    }
+  }
+  canvas.sticker(legs, near ? C11.skin : C11.skinLo, C11.line);
+  if (near) canvas.fill(legs.minus(legs.moved(0, 1)), C11.skinHi);
+}
+function drawTail2(canvas, pose, k) {
+  const tail = canvas.mask();
+  const wag = 1.4 * k * Math.sin(pose.wag) * pose.legs;
+  const reach = (6 + 1.5 * pose.legs) * k;
+  tail.addPolygon([
+    [ORIGIN8 - 13 * k, ORIGIN8 - 3 * k],
+    [ORIGIN8 - 13 * k - reach, ORIGIN8 - 0.5 * k + wag],
+    [ORIGIN8 - 13 * k, ORIGIN8 + 1.5 * k]
+  ]);
+  canvas.sticker(tail, C11.skinLo, C11.line);
+}
+function drawHead4(canvas, pose, k) {
+  const out = pose.out;
+  const bob = 0.7 * k * Math.sin(pose.step * 2 + 1) * clamp(out, 0, 1);
+  const hx = ORIGIN8 + (7 + 15 * out) * k;
+  const hy = ORIGIN8 - 3.5 * k + bob;
+  const skin = canvas.mask();
+  skin.addDisc(hx, hy, 5.4 * k);
+  skin.addDisc(hx + 3.6 * k, hy + 1 * k, 3.9 * k);
+  for (let n = 0; n <= 4; n++) {
+    const s = n / 4;
+    skin.addDisc(ORIGIN8 + 10 * k + (hx - ORIGIN8 - 10 * k) * s, ORIGIN8 - 3 * k + (hy - ORIGIN8 + 3 * k) * s, 3.6 * k);
+  }
+  canvas.sticker(skin, C11.skin, C11.line);
+  canvas.fill(skin.minus(skin.moved(0, 1)), C11.skinHi);
+  canvas.fill(skin.minus(skin.moved(0, -1)), C11.skinLo);
+  if (out < 0.55) return;
+  const ex = round(hx + 1.8 * k);
+  const ey = round(hy - 2.4 * k);
+  const eyes = canvas.mask();
+  const glint = canvas.mask();
+  const tall = k < 0.8 ? 2 : 3;
+  if (pose.happy) {
+    eyes.addPixel(ex, ey + 1).addPixel(ex + 1, ey + 1).addPixel(ex - 1, ey + 2).addPixel(ex + 2, ey + 2);
+  } else if (pose.blink) {
+    eyes.addPixel(ex, ey + 1).addPixel(ex + 1, ey + 1);
+  } else {
+    for (let y = 0; y < tall; y++) eyes.addPixel(ex, ey + y).addPixel(ex + 1, ey + y);
+    glint.addPixel(ex, ey);
+  }
+  canvas.fill(eyes, C11.eye);
+  canvas.fill(glint, C11.white);
+  const blush = canvas.mask();
+  const cheek = ex - (k < 0.8 ? 2 : 3);
+  for (let x = 0; x < (k < 0.8 ? 2 : 3); x++) blush.addPixel(cheek + x, ey + tall + 1).addPixel(cheek + x, ey + tall + 2);
+  canvas.fill(blush.and(skin), C11.blush);
+  const mouth = canvas.mask();
+  const mx = round(hx + 6.2 * k);
+  const my = round(hy + 2.6 * k);
+  if (pose.happy) {
+    for (let x = -2; x <= 0; x++) mouth.addPixel(mx + x, my).addPixel(mx + x, my + 1);
+    canvas.fill(mouth.and(skin), C11.mouth);
+  } else {
+    mouth.addPixel(mx - 2, my).addPixel(mx - 1, my + 1).addPixel(mx, my + 1).addPixel(mx + 1, my);
+    canvas.fill(mouth, C11.line);
+  }
+}
+function mirror(canvas) {
+  const flipped = new Canvas(canvas.width, canvas.height);
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 1; x < canvas.width; x++) {
+      flipped.pixels[y * canvas.width + x] = canvas.pixels[y * canvas.width + canvas.width - x];
+    }
+  }
+  return flipped;
+}
+function renderSprite9(pose, traits) {
+  const k = STAGE_SCALE[traits.stage];
+  const canvas = new Canvas(LOCAL9, LOCAL9);
+  drawLegs(canvas, pose, k, false);
+  drawTail2(canvas, pose, k);
+  drawHead4(canvas, pose, k);
+  drawLegs(canvas, pose, k, true);
+  drawShell2(canvas, k);
+  drawStuds(canvas, k, traits.marks);
+  canvas.strengthenEdges([[C11.line, C11.rim]]);
+  return pose.facing < 0 ? mirror(canvas) : canvas;
+}
+function spriteOffset7(pose) {
+  return [round(pose.x) - ORIGIN8, round(pose.y) - ORIGIN8];
+}
+var prepare10 = perTraits((traits) => {
+  const k = STAGE_SCALE[traits.stage];
+  const poses = buildPoses10(traits);
+  const bubbles2 = makeSparks(
+    BUBBLES3,
+    FRAMES11,
+    (birth) => {
+      const pose = poses[birth];
+      return [pose.x + (birth * 7 % 9 - 4) * k * 1.2, pose.y - (SHELL_RY + 3) * k];
+    },
+    { life: [24, 44], vx: [-0.1, 0.1], vy: [-0.5, -0.28] }
+  );
+  return { poses, bubbles: bubbles2 };
+});
+function draw11(index, traits) {
+  const { poses, bubbles: bubbles2 } = prepare10(traits);
+  const frame = new Canvas(WIDTH11, HEIGHT11);
+  forEachSpark(bubbles2, index, FRAMES11, (x, y, age) => {
+    const dots = age < 0.45 ? [[x, y]] : [
+      [x - 1, y],
+      [x + 1, y],
+      [x, y - 1],
+      [x, y + 1]
+    ];
+    for (const [px, py] of dots) {
+      if (px >= MARGIN11 && px < WIDTH11 - MARGIN11 && py >= MARGIN11 && py < HEIGHT11 - MARGIN11) {
+        frame.pixels[py * WIDTH11 + px] = C11.bubble;
+      }
+    }
+  });
+  const pose = poses[index];
+  const [ox, oy] = spriteOffset7(pose);
+  renderSprite9(pose, traits).stampOnto(frame, ox, oy, MARGIN11);
+  return frame.pixels;
+}
+var turtle = defineCritter({
+  id: "turtle",
+  name: "Turtle",
+  blurb: "Plods along under a patterned shell, and once a loop ducks inside and pops out grinning.",
+  alt: "Animated pixel art of a turtle with a patterned shell, walking around the frame and once a loop ducking into its shell and popping out grinning",
+  width: WIDTH11,
+  height: HEIGHT11,
+  frames: FRAMES11,
+  delayMs: 60,
+  poster: 20,
+  colourNames: COLOUR_NAMES11,
+  bodyColour: "shell",
+  accentColours: ["scute", "scuteHi", "bubble"],
+  fixedColours: ["eye", "white", "blush", "plastron", "plastronLo"],
+  edgeColours: ["rim", "bubble"],
+  colourways: [
+    {
+      id: "pond",
+      name: "Pond",
+      colours: {
+        rim: "#3f8f55",
+        line: "#1d4a2c",
+        shell: "#2f7d4f",
+        shellHi: "#58a870",
+        shellLo: "#1f5a3a",
+        scute: "#8fc95a",
+        scuteHi: "#bde57e",
+        plastron: "#f1e3a8",
+        plastronLo: "#d4bf7a",
+        skin: "#a6cf70",
+        skinHi: "#c4e290",
+        skinLo: "#76a24b",
+        eye: "#1d2b1a",
+        white: "#ffffff",
+        blush: "#f59a8a",
+        mouth: "#7a3b2c",
+        bubble: "#4fa8e0"
+      }
+    },
+    {
+      id: "honey",
+      name: "Honey",
+      colours: {
+        rim: "#b07a2c",
+        line: "#5e3a12",
+        shell: "#9a5e22",
+        shellHi: "#c88a42",
+        shellLo: "#6f4012",
+        scute: "#f0b64a",
+        scuteHi: "#ffd985",
+        plastron: "#f1e3a8",
+        plastronLo: "#d4bf7a",
+        skin: "#d8b676",
+        skinHi: "#ecd29a",
+        skinLo: "#b08a4c",
+        eye: "#2c1a06",
+        white: "#ffffff",
+        blush: "#f59a8a",
+        mouth: "#7a3b2c",
+        bubble: "#3f9fd8"
+      }
+    },
+    {
+      id: "blueberry",
+      name: "Blueberry",
+      colours: {
+        rim: "#5a6fd0",
+        line: "#26307a",
+        shell: "#4a5fb8",
+        shellHi: "#7388dc",
+        shellLo: "#34428c",
+        scute: "#a9b9ff",
+        scuteHi: "#d2dcff",
+        plastron: "#f1e3a8",
+        plastronLo: "#d4bf7a",
+        skin: "#8fb0e8",
+        skinHi: "#b4cbf4",
+        skinLo: "#6288c8",
+        eye: "#141a3a",
+        white: "#ffffff",
+        blush: "#f59a8a",
+        mouth: "#7a3b2c",
+        bubble: "#e0708c"
+      }
+    }
+  ],
+  draw: draw11
 });
 
 // src/critters/index.ts
-var critters = [dragon, axolotl, jellyfish, ghost, bat];
+var critters = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat];
 function findCritter(id) {
   return critters.find((critter) => critter.id === id);
 }
