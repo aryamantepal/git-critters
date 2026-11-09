@@ -103,6 +103,8 @@ The workflow also takes `output`, the path to save the GIF to, which defaults to
 
 ## Add a critter
 
+Want to design a new critter or contribute to the project? See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete guide, including how to fork the repo and open a pull request.
+
 A critter is one file in `src/critters/`, listed in `src/critters/index.ts`. It says what it's called and which colourways it comes in, and draws any frame on request as a grid of palette indexes. `src/engine/` has the parts for drawing and motion, and the existing critters show how they fit together. `src/critters/ghost.ts` is the simplest place to start.
 
 The rules:

@@ -1,0 +1,38 @@
+name: 🎨 Propose a New Critter
+description: Pitch a new pixel-art critter design for git-critters
+labels: ["enhancement", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a new critter! Anyone is welcome to design and contribute pixel-art critters.
+  - type: input
+    id: critter-name
+    attributes:
+      label: Critter Name
+      description: What creature or character are you proposing?
+      placeholder: e.g. Penguin, Fox, Sloth, Red Panda
+    validations:
+      required: true
+  - type: textarea
+    id: visual-concept
+    attributes:
+      label: Visual Concept & Animation
+      description: Describe the design, motion, and how it behaves across different trait levels (resting, steady, lively).
+      placeholder: e.g. Waddles side to side when steady, slides on belly when lively.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-palettes
+    attributes:
+      label: Proposed Colourways
+      description: What are 2-3 fun colourways / palettes for this critter?
+      placeholder: e.g. "ice", "tuxedo", "gentoo"
+    validations:
+      required: false
+  - type: checkboxes
+    id: willingness
+    attributes:
+      label: Implementation
+      options:
+        - label: I would like to create the pixel art / implement the PR myself!

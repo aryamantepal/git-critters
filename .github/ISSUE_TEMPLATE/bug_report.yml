@@ -1,0 +1,40 @@
+name: 🐛 Bug Report
+description: Report a rendering issue, broken link, or workflow failure
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve git-critters! Please provide as much detail as possible.
+  - type: input
+    id: critter-or-feature
+    attributes:
+      label: Affected Critter / Feature
+      placeholder: e.g. Ghost / Cat / Egg / Action workflow / Site preview
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug or unexpected behavior.
+      placeholder: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Configured critter with...
+        2. Action ran at...
+        3. Observed...
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or Logs
+      description: Drag and drop screenshots or paste workflow logs here.
+    validations:
+      required: false
