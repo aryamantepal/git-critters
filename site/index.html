@@ -25,7 +25,11 @@
 
       <fieldset>
         <legend>Critter</legend>
+        <div class="search-field">
+          <input id="critter-search" type="search" placeholder="Search critters…" autocomplete="off" spellcheck="false" />
+        </div>
         <div id="critters" class="critters"></div>
+        <p id="no-critters" class="note empty-search" hidden>No critters match your search.</p>
         <p id="blurb" class="blurb"></p>
       </fieldset>
 
@@ -41,14 +45,14 @@
         <p id="egg-note" class="note"></p>
       </fieldset>
 
-      <fieldset id="try-the-rest">
-        <legend>Try the rest</legend>
+      <details id="try-the-rest" class="try-the-rest">
+        <summary>Try the rest</summary>
         <div id="traits" class="traits"></div>
         <p class="note">
           This is only a preview. The site can't read your contributions, so it never knows which of these you'd get.
           The real critter is drawn from your activity each night.
         </p>
-      </fieldset>
+      </details>
 
       <div class="field">
         <label for="username">Your GitHub username</label>

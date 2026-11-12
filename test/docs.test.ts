@@ -49,3 +49,10 @@ test("the preview site has a browser icon", () => {
   assert.ok(existsSync("site/favicon.ico"));
   assert.ok(existsSync("site/favicon.png"));
 });
+
+test("the preview site has a critter search bar and collapsible traits", () => {
+  const html = readFileSync("site/index.html", "utf8");
+  assert.ok(html.includes('id="critter-search"'), "missing critter search input");
+  assert.ok(html.includes('<details id="try-the-rest"'), "try-the-rest should be a collapsible details element");
+  assert.ok(html.includes('id="no-critters"'), "missing empty search message container");
+});
