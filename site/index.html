@@ -26,10 +26,19 @@
       <fieldset>
         <legend>Critter</legend>
         <div class="search-field">
-          <input id="critter-search" type="search" placeholder="Search critters…" autocomplete="off" spellcheck="false" />
+          <input
+            id="critter-search"
+            type="search"
+            aria-label="Search critters"
+            aria-controls="critters"
+            placeholder="Search critters…"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+          />
         </div>
         <div id="critters" class="critters"></div>
-        <p id="no-critters" class="note empty-search" hidden>No critters match your search.</p>
+        <p id="no-critters" class="note empty-search" aria-live="polite" hidden>No critters match your search.</p>
         <p id="blurb" class="blurb"></p>
       </fieldset>
 
