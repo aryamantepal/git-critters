@@ -1,6 +1,6 @@
 // The options are listed by hand in two places, so make sure they keep up.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { HATCH_AFTER } from "../src/activity/egg.ts";
 import { LIVELY_FROM, MARKS_FROM, STAGE_FROM } from "../src/activity/traits.ts";
@@ -39,4 +39,13 @@ test("the README's table of activity states the thresholds the code uses", () =>
   const marks = row("Longest streak");
   for (const from of MARKS_FROM) assert.ok(marks.includes(`from ${from}`), `marks ${from}`);
   assert.ok(row("Contributions yesterday").includes(`lively from ${LIVELY_FROM}`));
+});
+
+test("the preview site has a browser icon", () => {
+  const html = readFileSync("site/index.html", "utf8");
+  assert.ok(!html.includes("R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="), "placeholder blank GIF remains");
+  assert.ok(html.includes('href="favicon.svg"'));
+  assert.ok(existsSync("site/favicon.svg"));
+  assert.ok(existsSync("site/favicon.ico"));
+  assert.ok(existsSync("site/favicon.png"));
 });
