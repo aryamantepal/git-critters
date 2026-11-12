@@ -18,6 +18,8 @@ function element<T extends HTMLElement>(id: string): T {
 
 const stage = element<HTMLCanvasElement>("stage");
 const critterList = element("critters");
+const critterSearch = element<HTMLInputElement>("critter-search");
+const noCritters = element("no-critters");
 const colourList = element("colours");
 const colourNote = element("colour-note");
 const traitList = element("traits");
@@ -187,7 +189,30 @@ function drawThumbnails(): void {
   drawThumbnail(thumbnails.get(egg.id)!, egg, wayFor(egg), FRESH_EGG);
 }
 
+interface CritterTile {
+  critter: Critter;
+  isSurprise: boolean;
+  label: HTMLLabelElement;
+  radio: HTMLInputElement;
+}
+
+const critterTiles: CritterTile[] = [];
+
+function filterCritters(): void {
+  const query = critterSearch.value.trim().toLowerCase();
+  let matches = 0;
+  for (const tile of critterTiles) {
+    const text = tile.isSurprise ? "surprise me egg" : `${tile.critter.name} ${tile.critter.id}`.toLowerCase();
+    const visible = !query || text.includes(query);
+    tile.label.hidden = !visible;
+    if (visible) matches++;
+  }
+  noCritters.hidden = matches > 0;
+}
+
 function buildCritterList(): void {
+  critterTiles.length = 0;
+  critterList.replaceChildren();
   // The egg is the fifth tile, for "Surprise me".
   for (const critter of [...critters, egg]) {
     const isSurprise = critter === egg;
@@ -208,7 +233,9 @@ function buildCritterList(): void {
     label.append(radio, canvas, name);
     critterList.append(label);
     thumbnails.set(critter.id, canvas);
+    critterTiles.push({ critter, isSurprise, label, radio });
   }
+  filterCritters();
   drawThumbnails();
 }
 
@@ -570,6 +597,24 @@ eggToggle.addEventListener("change", () => {
   state.egg = eggToggle.checked;
   if (!state.egg) state.eggView = null;
   renderPick(false);
+});
+
+critterSearch.addEventListener("input", filterCritters);
+critterSearch.addEventListener("search", filterCritters);
+critterSearch.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    critterSearch.value = "";
+    filterCritters();
+    critterSearch.blur();
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const firstVisible = critterTiles.find((tile) => !tile.label.hidden);
+    if (firstVisible) {
+      if (firstVisible.isSurprise) chooseSurprise();
+      else choose(firstVisible.critter);
+      firstVisible.radio.checked = true;
+    }
+  }
 });
 
 buildCritterList();
