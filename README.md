@@ -90,6 +90,7 @@ jobs:
 | `mushroom` | `umber`, `glowcap`, `amethyst` |
 | `turtle` | `pond`, `honey`, `blueberry` |
 | `bat` | `dusk`, `cocoa`, `mist` |
+| `fox` | `russet`, `arctic`, `silver` |
 
 `colour: languages` colours the critter from your languages, and is what you get if you leave `colour` out while `activity` is on. A colour from the table always wins over languages, and size, marks and motion still apply.
 
@@ -116,7 +117,7 @@ The rules:
 - Say which colours are `accentColours` (they take the second language's hue), `fixedColours` (they never change), and `edgeColours` (they reach the silhouette), and which one is the `bodyColour`.
 - Outlines have to show on both white and `#0d1117`, since GIF transparency is all or nothing.
 
-The tests apply to every critter and colourway automatically, and again across the ends of each trait's range. They read GIFs back and check that they hold exactly what was drawn, never leave the frame, loop without a jump, show on both themes, and stay under 1 MB. They also check that every language's colours keep the outline showing. The egg (`src/critters/egg.ts`, not in the list, since nobody picks it) passes the same checks at every crack level. Each critter's GIF is byte-for-byte repeatable, and with the default traits all 30 colourways are locked to the hashes they had before traits existed.
+The tests apply to every critter and colourway automatically, and again across the ends of each trait's range. They read GIFs back and check that they hold exactly what was drawn, never leave the frame, loop without a jump, show on both themes, and stay under 1 MB. They also check that every language's colours keep the outline showing. The egg (`src/critters/egg.ts`, not in the list, since nobody picks it) passes the same checks at every crack level. Each critter's GIF is byte-for-byte repeatable, and with the default traits all 33 colourways are locked to the hashes they had before traits existed.
 
 ## Develop
 
