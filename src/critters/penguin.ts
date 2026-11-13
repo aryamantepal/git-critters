@@ -1,3 +1,5 @@
+import { forEachSpark, makeSparks } from "../engine/body.ts";
+import type { Spark } from "../engine/body.ts";
 import { Canvas } from "../engine/canvas.ts";
 import { colourIndexes, defineCritter } from "../engine/critter.ts";
 import type { Mask, Point } from "../engine/mask.ts";
@@ -25,6 +27,10 @@ const GAIT: Readonly<Record<Mood, number>> = { resting: 0.45, steady: 1, lively:
 const SWING: Readonly<Record<Mood, number>> = { resting: 0.5, steady: 1, lively: 1.8 };
 // How high it hops when it cheers, at full size.
 const HOP_HEIGHT: Readonly<Record<Mood, number>> = { resting: 0, steady: 6, lively: 8 };
+// How many puffs of snow its feet kick up over a loop, by mood. None while it stands to cheer.
+const SNOW: Readonly<Record<Mood, number>> = { resting: 24, steady: 44, lively: 64 };
+// How far out from between its feet the snow flies off, at full size: just past its feet, so its body doesn't hide it.
+const KICK_OUT = 11;
 
 // Its walk on the ice, by where its feet touch the ground.
 const WAYPOINTS: readonly Point[] = [
@@ -85,6 +91,7 @@ const COLOUR_NAMES = [
   "beak",
   "beakLo",
   "blush",
+  "snow",
 ] as const;
 const C = colourIndexes(COLOUR_NAMES);
 
@@ -104,6 +111,10 @@ interface Pose {
   /** Where it's looking: negative is left, positive is right. */
   look: number;
   blink: boolean;
+  /** Which way it's going, in pixels a frame, so snow can fly the other way. */
+  travel: Point;
+  /** Whether it's walking rather than stopped to cheer. */
+  walking: boolean;
 }
 
 function cheerAt(mood: Mood, i: number): number {
@@ -179,6 +190,8 @@ function buildPoses({ mood }: Traits): Pose[] {
       flap: [flipper(-1), flipper(1)],
       look: look[i],
       blink: blinks.has(i),
+      travel: [vx[i], vy[i]],
+      walking: cheer === 0,
     };
   });
 }
@@ -360,11 +373,62 @@ function renderSprite(pose: Pose, traits: Traits): Canvas {
   return canvas;
 }
 
-const prepare = perTraits(buildPoses);
+/** Puffs of snow kicked up from its feet, flying back the way it came. */
+function kickSnow(poses: readonly Pose[], { mood, stage }: Traits): Spark[] {
+  const k = STAGE_SCALE[stage];
+  // How much of its pace is across the frame. Walking straight up or down, the snow flies off
+  // either side, and more slowly.
+  const across = (birth: number) => {
+    const [vx, vy] = poses[birth].travel;
+    return vx / (Math.hypot(vx, vy) || 1);
+  };
+  const side = (birth: number) => (Math.abs(across(birth)) > 0.3 ? -Math.sign(across(birth)) : birth % 2 === 0 ? -1 : 1);
+  const sparks = makeSparks(
+    SNOW[mood],
+    FRAMES,
+    (birth) => {
+      const pose = poses[birth];
+      return [pose.x + side(birth) * KICK_OUT * k, pose.y + 1];
+    },
+    { life: [12, 22], vx: [0.15, 0.5], vy: [-0.25, -0.05] },
+  );
+  return sparks
+    .filter((spark) => poses[spark.birth].walking)
+    .map((spark) => ({ ...spark, vx: side(spark.birth) * spark.vx * Math.max(0.4, Math.abs(across(spark.birth))) }));
+}
+
+function drawSnow(frame: Canvas, snow: readonly Spark[], index: number): void {
+  const inside = ([px, py]: Point) => px >= MARGIN && px < WIDTH - MARGIN && py >= MARGIN && py < HEIGHT - MARGIN;
+  forEachSpark(snow, index, FRAMES, (x, y, age) => {
+    if (age >= 0.6) {
+      // It thins to a single flake before it's gone.
+      if (inside([x, y])) frame.pixels[y * WIDTH + x] = C.snow;
+      return;
+    }
+    // A fresh puff is a cross with a white glint in the middle. It's drawn whole or not at
+    // all, so the glint never meets the page, where white wouldn't show.
+    const arms: Point[] = [
+      [x - 1, y],
+      [x + 1, y],
+      [x, y - 1],
+      [x, y + 1],
+    ];
+    if (!arms.every(inside)) return;
+    for (const [px, py] of arms) frame.pixels[py * WIDTH + px] = C.snow;
+    frame.pixels[y * WIDTH + x] = C.white;
+  });
+}
+
+const prepare = perTraits((traits): { poses: Pose[]; snow: Spark[] } => {
+  const poses = buildPoses(traits);
+  return { poses, snow: kickSnow(poses, traits) };
+});
 
 function draw(index: number, traits: Traits): Uint8Array {
-  const pose = prepare(traits)[index];
+  const { poses, snow } = prepare(traits);
+  const pose = poses[index];
   const frame = new Canvas(WIDTH, HEIGHT);
+  drawSnow(frame, snow, index);
   renderSprite(pose, traits).stampOnto(frame, round(pose.x) - ORIGIN_X, round(pose.y) - GROUND, MARGIN);
   return frame.pixels;
 }
@@ -372,8 +436,8 @@ function draw(index: number, traits: Traits): Uint8Array {
 export const penguin = defineCritter({
   id: "penguin",
   name: "Penguin",
-  blurb: "Waddles about on the ice, and stops once a loop to hop and cheer. Resting, it just shuffles and blinks.",
-  alt: "Animated pixel art of a round penguin waddling around the frame, rocking from foot to foot, then stopping to hop on the spot with its flippers up",
+  blurb: "Waddles about on the ice kicking up snow, and stops once a loop to hop and cheer. Resting, it just shuffles and blinks.",
+  alt: "Animated pixel art of a round penguin waddling around the frame, rocking from foot to foot and kicking up snow, then stopping to hop on the spot with its flippers up",
   width: WIDTH,
   height: HEIGHT,
   frames: FRAMES,
@@ -382,8 +446,8 @@ export const penguin = defineCritter({
   colourNames: COLOUR_NAMES,
   bodyColour: "body",
   accentColours: ["beak", "beakLo"],
-  fixedColours: ["belly", "bellyLo", "eye", "white", "blush"],
-  edgeColours: ["rim"],
+  fixedColours: ["belly", "bellyLo", "eye", "white", "blush", "snow"],
+  edgeColours: ["rim", "snow"],
   colourways: [
     {
       id: "tuxedo",
@@ -401,6 +465,7 @@ export const penguin = defineCritter({
         beak: "#f6c445",
         beakLo: "#d08a1f",
         blush: "#f49ab0",
+        snow: "#8fb3d9",
       },
     },
     {
@@ -419,6 +484,7 @@ export const penguin = defineCritter({
         beak: "#62d4ea",
         beakLo: "#2a9fbf",
         blush: "#f4a6c0",
+        snow: "#7fb0dc",
       },
     },
     {
@@ -437,6 +503,7 @@ export const penguin = defineCritter({
         beak: "#ff7a2f",
         beakLo: "#d4521a",
         blush: "#f79a8a",
+        snow: "#9fb4c8",
       },
     },
   ],

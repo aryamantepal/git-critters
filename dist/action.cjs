@@ -4251,6 +4251,8 @@ var CHEER_FLAPS = 4;
 var GAIT = { resting: 0.45, steady: 1, lively: 1 };
 var SWING = { resting: 0.5, steady: 1, lively: 1.8 };
 var HOP_HEIGHT = { resting: 0, steady: 6, lively: 8 };
+var SNOW = { resting: 24, steady: 44, lively: 64 };
+var KICK_OUT = 11;
 var WAYPOINTS7 = [
   [46, 84],
   [72, 70],
@@ -4301,7 +4303,8 @@ var COLOUR_NAMES10 = [
   "white",
   "beak",
   "beakLo",
-  "blush"
+  "blush",
+  "snow"
 ];
 var C10 = colourIndexes(COLOUR_NAMES10);
 function cheerAt(mood, i) {
@@ -4368,7 +4371,9 @@ function buildPoses9({ mood }) {
       lift: [2.5 * gait * Math.max(0, s) * walk, 2.5 * gait * Math.max(0, -s) * walk],
       flap: [flipper(-1), flipper(1)],
       look: look[i],
-      blink: blinks.has(i)
+      blink: blinks.has(i),
+      travel: [vx[i], vy[i]],
+      walking: cheer === 0
     };
   });
 }
@@ -4519,18 +4524,59 @@ function renderSprite8(pose, traits) {
   canvas.strengthenEdges([[C10.line, C10.rim]]);
   return canvas;
 }
-var prepare9 = perTraits(buildPoses9);
+function kickSnow(poses, { mood, stage }) {
+  const k = STAGE_SCALE[stage];
+  const across = (birth) => {
+    const [vx, vy] = poses[birth].travel;
+    return vx / (Math.hypot(vx, vy) || 1);
+  };
+  const side = (birth) => Math.abs(across(birth)) > 0.3 ? -Math.sign(across(birth)) : birth % 2 === 0 ? -1 : 1;
+  const sparks = makeSparks(
+    SNOW[mood],
+    FRAMES10,
+    (birth) => {
+      const pose = poses[birth];
+      return [pose.x + side(birth) * KICK_OUT * k, pose.y + 1];
+    },
+    { life: [12, 22], vx: [0.15, 0.5], vy: [-0.25, -0.05] }
+  );
+  return sparks.filter((spark) => poses[spark.birth].walking).map((spark) => ({ ...spark, vx: side(spark.birth) * spark.vx * Math.max(0.4, Math.abs(across(spark.birth))) }));
+}
+function drawSnow(frame, snow, index) {
+  const inside = ([px, py]) => px >= MARGIN10 && px < WIDTH10 - MARGIN10 && py >= MARGIN10 && py < HEIGHT10 - MARGIN10;
+  forEachSpark(snow, index, FRAMES10, (x, y, age) => {
+    if (age >= 0.6) {
+      if (inside([x, y])) frame.pixels[y * WIDTH10 + x] = C10.snow;
+      return;
+    }
+    const arms = [
+      [x - 1, y],
+      [x + 1, y],
+      [x, y - 1],
+      [x, y + 1]
+    ];
+    if (!arms.every(inside)) return;
+    for (const [px, py] of arms) frame.pixels[py * WIDTH10 + px] = C10.snow;
+    frame.pixels[y * WIDTH10 + x] = C10.white;
+  });
+}
+var prepare9 = perTraits((traits) => {
+  const poses = buildPoses9(traits);
+  return { poses, snow: kickSnow(poses, traits) };
+});
 function draw10(index, traits) {
-  const pose = prepare9(traits)[index];
+  const { poses, snow } = prepare9(traits);
+  const pose = poses[index];
   const frame = new Canvas(WIDTH10, HEIGHT10);
+  drawSnow(frame, snow, index);
   renderSprite8(pose, traits).stampOnto(frame, round(pose.x) - ORIGIN_X2, round(pose.y) - GROUND, MARGIN10);
   return frame.pixels;
 }
 var penguin = defineCritter({
   id: "penguin",
   name: "Penguin",
-  blurb: "Waddles about on the ice, and stops once a loop to hop and cheer. Resting, it just shuffles and blinks.",
-  alt: "Animated pixel art of a round penguin waddling around the frame, rocking from foot to foot, then stopping to hop on the spot with its flippers up",
+  blurb: "Waddles about on the ice kicking up snow, and stops once a loop to hop and cheer. Resting, it just shuffles and blinks.",
+  alt: "Animated pixel art of a round penguin waddling around the frame, rocking from foot to foot and kicking up snow, then stopping to hop on the spot with its flippers up",
   width: WIDTH10,
   height: HEIGHT10,
   frames: FRAMES10,
@@ -4539,8 +4585,8 @@ var penguin = defineCritter({
   colourNames: COLOUR_NAMES10,
   bodyColour: "body",
   accentColours: ["beak", "beakLo"],
-  fixedColours: ["belly", "bellyLo", "eye", "white", "blush"],
-  edgeColours: ["rim"],
+  fixedColours: ["belly", "bellyLo", "eye", "white", "blush", "snow"],
+  edgeColours: ["rim", "snow"],
   colourways: [
     {
       id: "tuxedo",
@@ -4557,7 +4603,8 @@ var penguin = defineCritter({
         white: "#ffffff",
         beak: "#f6c445",
         beakLo: "#d08a1f",
-        blush: "#f49ab0"
+        blush: "#f49ab0",
+        snow: "#8fb3d9"
       }
     },
     {
@@ -4575,7 +4622,8 @@ var penguin = defineCritter({
         white: "#ffffff",
         beak: "#62d4ea",
         beakLo: "#2a9fbf",
-        blush: "#f4a6c0"
+        blush: "#f4a6c0",
+        snow: "#7fb0dc"
       }
     },
     {
@@ -4593,7 +4641,8 @@ var penguin = defineCritter({
         white: "#ffffff",
         beak: "#ff7a2f",
         beakLo: "#d4521a",
-        blush: "#f79a8a"
+        blush: "#f79a8a",
+        snow: "#9fb4c8"
       }
     }
   ],
