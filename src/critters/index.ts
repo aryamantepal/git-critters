@@ -7,11 +7,12 @@ import { frog } from "./frog.ts";
 import { ghost } from "./ghost.ts";
 import { jellyfish } from "./jellyfish.ts";
 import { mushroom } from "./mushroom.ts";
+import { penguin } from "./penguin.ts";
 import { robot } from "./robot.ts";
 import { turtle } from "./turtle.ts";
 
 /** Every critter people can pick. To add one, write its file and list it here. */
-export const critters: readonly Critter[] = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat];
+export const critters: readonly Critter[] = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat, penguin];
 
 export function findCritter(id: string): Critter | undefined {
   return critters.find((critter) => critter.id === id);
