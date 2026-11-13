@@ -1217,7 +1217,7 @@ function renderSprite(pose, traits) {
   }
   parts.push([12, () => drawHead(canvas, pose, joint)]);
   parts.sort((a, b) => a[0] - b[0]);
-  for (const [, draw12] of parts) draw12();
+  for (const [, draw13] of parts) draw13();
   canvas.strengthenEdges([[C2.line, C2.rim]]);
   return canvas;
 }
@@ -2495,7 +2495,7 @@ function drawSpikes(canvas, pose, spine, k) {
   canvas.sticker(mask, C5.wing, C5.line);
 }
 function drawWing(canvas, pose, side, size, marks) {
-  const { wrist: WING_WRIST2, tips: WING_TIPS2, root: WING_ROOT2, shoulder: SHOULDER3, scale: k } = size;
+  const { wrist: WING_WRIST2, tips: WING_TIPS2, root: WING_ROOT2, shoulder: SHOULDER4, scale: k } = size;
   let power = clamp((pose.lift - 0.45) / 0.25, 0, 1);
   power = power * power * (3 - 2 * power);
   const amplitude = (12 + 38 * power) * Math.PI / 180;
@@ -2509,9 +2509,9 @@ function drawWing(canvas, pose, side, size, marks) {
     const out = spanIn * Math.cos(inner) + spanOut * Math.cos(outer);
     return project(
       pose.view,
-      SHOULDER3[0] + along,
-      SHOULDER3[1] + up + Math.min(along, 0) * WING_DROOP,
-      side * (SHOULDER3[2] + out)
+      SHOULDER4[0] + along,
+      SHOULDER4[1] + up + Math.min(along, 0) * WING_DROOP,
+      side * (SHOULDER4[2] + out)
     );
   };
   const near = side * Math.cos(pose.view.yaw) > 0;
@@ -2653,7 +2653,7 @@ function renderSprite4(pose, traits) {
   parts.push([12, () => drawHead3(canvas, pose, spine, HEADS2[traits.stage])]);
   parts.push([tailDepth + 0.5, () => drawTailFin(canvas, pose, spine, k)]);
   parts.sort((a, b) => a[0] - b[0]);
-  for (const [, draw12] of parts) draw12();
+  for (const [, draw13] of parts) draw13();
   canvas.strengthenEdges([[C5.line, C5.rim]]);
   return canvas;
 }
@@ -4234,11 +4234,377 @@ var mushroom = defineCritter({
   draw: draw9
 });
 
-// src/critters/robot.ts
+// src/critters/penguin.ts
 var WIDTH10 = 180;
 var HEIGHT10 = 120;
 var FRAMES10 = 200;
 var MARGIN10 = 2;
+var STEPS = 18;
+var LOCAL8 = 96;
+var ORIGIN_X2 = LOCAL8 / 2;
+var GROUND = 72;
+var ROCK = 0.13;
+var CHEER_START = 116;
+var CHEER_END = 146;
+var HOPS3 = 2;
+var CHEER_FLAPS = 4;
+var GAIT = { resting: 0.45, steady: 1, lively: 1 };
+var SWING = { resting: 0.5, steady: 1, lively: 1.8 };
+var HOP_HEIGHT = { resting: 0, steady: 6, lively: 8 };
+var WAYPOINTS7 = [
+  [46, 84],
+  [72, 70],
+  [104, 76],
+  [134, 68],
+  [140, 90],
+  [110, 100],
+  [84, 92],
+  [56, 100]
+];
+var BODY_MID = -16;
+var BODY_RX = 13;
+var BODY_RY = 18;
+var HEAD_Y = -36;
+var HEAD_R = 10.5;
+var BELLY_Y = -13;
+var BELLY_RX = 9.5;
+var BELLY_RY = 13.5;
+var SHOULDER3 = [10.5, -26];
+var FLIPPER_LENGTH = 15;
+var FLIPPER_WIDTH = 3.3;
+var EYE_Y = -38;
+var BEAK_Y = -32.5;
+var EYE_GAP4 = [3, 4, 4, 5];
+var FACE_SLIDE = [0, 0, 0.6, 0.6];
+var MARKS6 = [
+  [],
+  [[0, -17]],
+  [
+    [-4, -19],
+    [4, -19]
+  ],
+  [
+    [-4.5, -20],
+    [4.5, -20],
+    [0, -12]
+  ]
+];
+var COLOUR_NAMES10 = [
+  "rim",
+  "line",
+  "body",
+  "bodyHi",
+  "bodyLo",
+  "belly",
+  "bellyLo",
+  "eye",
+  "white",
+  "beak",
+  "beakLo",
+  "blush"
+];
+var C10 = colourIndexes(COLOUR_NAMES10);
+function cheerAt(mood, i) {
+  if (mood === "resting" || i < CHEER_START || i > CHEER_END) return 0;
+  return clamp(Math.min(i - CHEER_START, CHEER_END - i) / 4, 0, 1);
+}
+function sample(values, at) {
+  const n = values.length;
+  const low = Math.floor(at);
+  const f = at - low;
+  return values[(low % n + n) % n] * (1 - f) + values[((low + 1) % n + n) % n] * f;
+}
+function walkPath(mood, cheer) {
+  const path = roam(WAYPOINTS7, mood, FRAMES10);
+  const rate = cheer.map((c) => 1 - c);
+  const total = rate.reduce((sum2, v) => sum2 + v, 0);
+  const progress = new Float64Array(FRAMES10);
+  let sum = 0;
+  for (let i = 0; i < FRAMES10; i++) {
+    progress[i] = sum * FRAMES10 / total;
+    sum += rate[i];
+  }
+  const x = progress.map((p) => sample(path.x, p));
+  const y = progress.map((p) => sample(path.y, p));
+  const vx = new Float64Array(FRAMES10);
+  const vy = new Float64Array(FRAMES10);
+  for (let i = 0; i < FRAMES10; i++) {
+    const next = (i + 1) % FRAMES10;
+    const previous = (i - 1 + FRAMES10) % FRAMES10;
+    vx[i] = (x[next] - x[previous]) / 2;
+    vy[i] = (y[next] - y[previous]) / 2;
+  }
+  return { x, y, vx, vy };
+}
+function buildPoses9({ mood }) {
+  const cheers = Float64Array.from({ length: FRAMES10 }, (_, i) => cheerAt(mood, i));
+  const { x, y, vx, vy } = walkPath(mood, cheers);
+  const step2 = cumulativePhase(
+    vx.map((v, i) => 0.25 + Math.hypot(v, vy[i])),
+    cyclesFor(mood, STEPS)
+  );
+  const look = smooth(vx.map((v) => clamp(v * 3, -2, 2)), 13);
+  const blinks = blinkFrames(mood, [24, 70, 168], FRAMES10);
+  const span = CHEER_END - CHEER_START;
+  const hops = cyclesFor(mood, HOPS3);
+  const flaps = cyclesFor(mood, CHEER_FLAPS);
+  const gait = GAIT[mood];
+  const swing = SWING[mood];
+  return Array.from({ length: FRAMES10 }, (_, i) => {
+    const cheer = cheers[i];
+    const walk = 1 - cheer;
+    const s = Math.sin(step2[i]);
+    const into = (i - CHEER_START) / span;
+    const hop = cheer > 0 ? HOP_HEIGHT[mood] * cheer * Math.abs(Math.sin(Math.PI * hops * into)) : 0;
+    const raised = 1.75 + 0.3 * Math.sin(TAU * flaps * into);
+    const balance = Math.cos(step2[i]);
+    const flipper = (side) => (0.34 + (0.12 * side * s + 0.16 * balance) * swing) * walk + raised * cheer;
+    return {
+      x: x[i],
+      y: y[i],
+      rock: ROCK * gait * s * walk,
+      bob: 1.2 * gait * Math.abs(s) * walk,
+      hop,
+      lift: [2.5 * gait * Math.max(0, s) * walk, 2.5 * gait * Math.max(0, -s) * walk],
+      flap: [flipper(-1), flipper(1)],
+      look: look[i],
+      blink: blinks.has(i)
+    };
+  });
+}
+function placementOf(pose, k) {
+  return {
+    k,
+    cos: Math.cos(pose.rock),
+    sin: Math.sin(pose.rock),
+    px: ORIGIN_X2,
+    py: GROUND - (pose.bob + pose.hop) * k
+  };
+}
+function toBody(at, x, y) {
+  const dx = x - at.px;
+  const dy = y - at.py;
+  return [(dx * at.cos + dy * at.sin) / at.k, (-dx * at.sin + dy * at.cos) / at.k];
+}
+function toSprite(at, u, v) {
+  const su = u * at.k;
+  const sv = v * at.k;
+  return [at.px + su * at.cos - sv * at.sin, at.py + su * at.sin + sv * at.cos];
+}
+function shapeMask(canvas, at, inside) {
+  const mask = canvas.mask();
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const [u, v] = toBody(at, x, y);
+      if (inside(u, v)) mask.addPixel(x, y);
+    }
+  }
+  return mask;
+}
+function insideBody(u, v) {
+  if (u * u + (v - HEAD_Y) ** 2 <= HEAD_R * HEAD_R) return true;
+  if (v > 0) return false;
+  const t = (v - BODY_MID) / BODY_RY;
+  if (Math.abs(t) > 1) return false;
+  return Math.abs(u) <= BODY_RX * Math.sqrt(1 - t * t) * (1 + 0.1 * t);
+}
+function insideBelly(u, v) {
+  return (u / BELLY_RX) ** 2 + ((v - BELLY_Y) / BELLY_RY) ** 2 <= 1;
+}
+function insideFlipper(side, angle) {
+  const du = side * Math.sin(angle);
+  const dv = Math.cos(angle);
+  const half = FLIPPER_LENGTH / 2;
+  return (u, v) => {
+    const ru = u - side * SHOULDER3[0];
+    const rv = v - SHOULDER3[1];
+    const along = ru * du + rv * dv;
+    const across = -ru * dv + rv * du;
+    return ((along - half) / half) ** 2 + (across / FLIPPER_WIDTH) ** 2 <= 1;
+  };
+}
+function drawFlippers(canvas, pose, at) {
+  for (const [n, side] of [-1, 1].entries()) {
+    const flipper = shapeMask(canvas, at, insideFlipper(side, pose.flap[n]));
+    canvas.sticker(flipper, C10.body, C10.line);
+    canvas.fill(flipper.minus(flipper.moved(-1, -1)), C10.bodyLo);
+  }
+}
+function drawBody5(canvas, at) {
+  const body = shapeMask(canvas, at, insideBody);
+  canvas.sticker(body, C10.body, C10.line);
+  canvas.fill(body.minus(body.moved(-2, -2)), C10.bodyLo);
+  canvas.fill(body.minus(body.moved(1, 2)), C10.bodyHi);
+  const belly = shapeMask(canvas, at, insideBelly).and(body);
+  canvas.fill(belly, C10.belly);
+  canvas.fill(belly.minus(body.moved(-2, -2)), C10.bellyLo);
+  return { body, belly };
+}
+function drawFeet(canvas, pose, k) {
+  for (const [n, side] of [-1, 1].entries()) {
+    const foot = canvas.mask();
+    const cx = ORIGIN_X2 + side * 5 * k;
+    const cy = GROUND + (1 - pose.hop - pose.lift[n]) * k;
+    for (let y = Math.floor(cy - 3); y <= cy + 3; y++) {
+      for (let x = Math.floor(cx - 6); x <= cx + 6; x++) {
+        if (((x - cx) / (4.5 * k)) ** 2 + ((y - cy) / Math.max(1.5, 2.2 * k)) ** 2 <= 1) foot.addPixel(x, y);
+      }
+    }
+    canvas.sticker(foot, C10.beak, C10.line);
+    canvas.fill(foot.minus(foot.moved(0, -1)), C10.beakLo);
+  }
+}
+function drawFace4(canvas, pose, at, body, stage) {
+  const slide = pose.look * FACE_SLIDE[stage];
+  const [ex, ey] = toSprite(at, slide, EYE_Y);
+  const cx = round(ex);
+  const top = round(ey) - 2;
+  const gap = EYE_GAP4[stage];
+  const rings = canvas.mask();
+  const pupils = canvas.mask();
+  const glance = pose.look > 1 ? 1 : pose.look < -1 ? -1 : 0;
+  for (const side of [-1, 1]) {
+    const left = cx + side * gap - 2;
+    if (pose.blink) {
+      rings.addPixel(left, top + 2).addPixel(left + 1, top + 1).addPixel(left + 2, top + 1).addPixel(left + 3, top + 2);
+      continue;
+    }
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        const corner = (y === 0 || y === 3) && (x === 0 || x === 3);
+        if (!corner) rings.addPixel(left + x, top + y);
+      }
+    }
+    for (let y = 1; y < 3; y++) for (let x = 1; x < 3; x++) pupils.addPixel(left + x + glance, top + y);
+  }
+  canvas.fill(rings.and(body), C10.white);
+  canvas.fill(pupils.and(body), C10.eye);
+  const blush = canvas.mask();
+  for (const side of [-1, 1]) {
+    const bx2 = side < 0 ? cx - gap - 1 : cx + gap;
+    blush.addPixel(bx2, top + 4).addPixel(bx2 + side, top + 4);
+  }
+  canvas.fill(blush.and(body), C10.blush);
+  const [bx, by] = toSprite(at, slide, BEAK_Y);
+  const beakX = round(bx);
+  const beakY = Math.max(round(by), top + 4);
+  const wide = stage >= 2 ? 2 : 1;
+  const beak = canvas.mask();
+  const tip = canvas.mask();
+  for (let x = -wide; x <= wide; x++) beak.addPixel(beakX + x, beakY);
+  for (let x = 1 - wide; x <= wide - 1; x++) beak.addPixel(beakX + x, beakY + 1);
+  tip.addPixel(beakX, beakY + wide);
+  canvas.fill(beak.and(body), C10.beak);
+  canvas.fill(tip.and(body), C10.beakLo);
+}
+function drawMarks3(canvas, at, belly, marks) {
+  const spots = canvas.mask();
+  for (const [u, v] of MARKS6[marks]) {
+    const [sx, sy] = toSprite(at, u, v);
+    const x = round(sx + 0.5);
+    const y = round(sy + 0.5);
+    spots.addPixel(x, y).addPixel(x - 1, y).addPixel(x, y - 1).addPixel(x - 1, y - 1);
+  }
+  canvas.fill(spots.and(belly), C10.body);
+}
+function renderSprite8(pose, traits) {
+  const k = STAGE_SCALE[traits.stage];
+  const at = placementOf(pose, k);
+  const canvas = new Canvas(LOCAL8, LOCAL8);
+  drawFlippers(canvas, pose, at);
+  const { body, belly } = drawBody5(canvas, at);
+  drawMarks3(canvas, at, belly, traits.marks);
+  drawFace4(canvas, pose, at, body, traits.stage);
+  drawFeet(canvas, pose, k);
+  canvas.strengthenEdges([[C10.line, C10.rim]]);
+  return canvas;
+}
+var prepare9 = perTraits(buildPoses9);
+function draw10(index, traits) {
+  const pose = prepare9(traits)[index];
+  const frame = new Canvas(WIDTH10, HEIGHT10);
+  renderSprite8(pose, traits).stampOnto(frame, round(pose.x) - ORIGIN_X2, round(pose.y) - GROUND, MARGIN10);
+  return frame.pixels;
+}
+var penguin = defineCritter({
+  id: "penguin",
+  name: "Penguin",
+  blurb: "Waddles about on the ice, and stops once a loop to hop and cheer. Resting, it just shuffles and blinks.",
+  alt: "Animated pixel art of a round penguin waddling around the frame, rocking from foot to foot, then stopping to hop on the spot with its flippers up",
+  width: WIDTH10,
+  height: HEIGHT10,
+  frames: FRAMES10,
+  delayMs: 60,
+  poster: 12,
+  colourNames: COLOUR_NAMES10,
+  bodyColour: "body",
+  accentColours: ["beak", "beakLo"],
+  fixedColours: ["belly", "bellyLo", "eye", "white", "blush"],
+  edgeColours: ["rim"],
+  colourways: [
+    {
+      id: "tuxedo",
+      name: "Tuxedo",
+      colours: {
+        rim: "#6b7894",
+        line: "#10141d",
+        body: "#263247",
+        bodyHi: "#3c4c68",
+        bodyLo: "#1a2333",
+        belly: "#f4f6fa",
+        bellyLo: "#cfd6e2",
+        eye: "#10141d",
+        white: "#ffffff",
+        beak: "#f6c445",
+        beakLo: "#d08a1f",
+        blush: "#f49ab0"
+      }
+    },
+    {
+      id: "ice",
+      name: "Ice",
+      colours: {
+        rim: "#5a86c2",
+        line: "#0e1f3d",
+        body: "#2d5a8f",
+        bodyHi: "#4a7fbd",
+        bodyLo: "#1f4170",
+        belly: "#e8f8ff",
+        bellyLo: "#b5dcef",
+        eye: "#0e1f3d",
+        white: "#ffffff",
+        beak: "#62d4ea",
+        beakLo: "#2a9fbf",
+        blush: "#f4a6c0"
+      }
+    },
+    {
+      id: "gentoo",
+      name: "Gentoo",
+      colours: {
+        rim: "#7a7a8c",
+        line: "#15151c",
+        body: "#383844",
+        bodyHi: "#51515f",
+        bodyLo: "#25252e",
+        belly: "#fbfbf8",
+        bellyLo: "#d9d9d2",
+        eye: "#15151c",
+        white: "#ffffff",
+        beak: "#ff7a2f",
+        beakLo: "#d4521a",
+        blush: "#f79a8a"
+      }
+    }
+  ],
+  draw: draw10
+});
+
+// src/critters/robot.ts
+var WIDTH11 = 180;
+var HEIGHT11 = 120;
+var FRAMES11 = 200;
+var MARGIN11 = 2;
 var BOBS3 = 6;
 var SWAY_CYCLES2 = 3;
 var GLOW_CYCLES = 5;
@@ -4246,11 +4612,11 @@ var JET_CYCLES = 20;
 var ARM_CYCLES = 6;
 var PINGS = 3;
 var SPARKS = 34;
-var LOCAL8 = 90;
-var ORIGIN7 = LOCAL8 / 2;
+var LOCAL9 = 90;
+var ORIGIN7 = LOCAL9 / 2;
 var BEEP_START = 104;
 var BEEP_END = 130;
-var WAYPOINTS7 = [
+var WAYPOINTS8 = [
   [40, 66],
   [70, 48],
   [104, 62],
@@ -4261,13 +4627,13 @@ var WAYPOINTS7 = [
   [60, 78],
   [34, 72]
 ];
-var MARKS6 = [[], [0], [-3, 3], [-4, 0, 4]];
-var EYE_GAP4 = [2, 3, 3, 4];
+var MARKS7 = [[], [0], [-3, 3], [-4, 0, 4]];
+var EYE_GAP5 = [2, 3, 3, 4];
 var EYE_WIDTH2 = [1, 2, 2, 2];
 var EYE_HEIGHT2 = [2, 3, 3, 4];
 var SMALL_HEART = ["XX.XX", "XXXXX", ".XXX.", "..X.."];
 var BIG_HEART = [".XX.XX.", "XXXXXXX", "XXXXXXX", ".XXXXX.", "..XXX..", "...X..."];
-var COLOUR_NAMES10 = [
+var COLOUR_NAMES11 = [
   "rim",
   "line",
   "body",
@@ -4282,35 +4648,35 @@ var COLOUR_NAMES10 = [
   "glow",
   "glowHi"
 ];
-var C10 = colourIndexes(COLOUR_NAMES10);
-function buildPoses9({ mood, stage }) {
+var C11 = colourIndexes(COLOUR_NAMES11);
+function buildPoses10({ mood, stage }) {
   const k = STAGE_SCALE[stage];
-  const { x, y, vx } = roam(WAYPOINTS7, mood, FRAMES10);
+  const { x, y, vx } = roam(WAYPOINTS8, mood, FRAMES11);
   const look = smooth(vx.map((v) => clamp(v * 3.4, -3 * k, 3 * k)), 13);
   const lean = smooth(vx.map((v) => clamp(v * 1.8, -2 * k, 2 * k)), 21);
-  const blinks = blinkFrames(mood, [30, 60, 170], FRAMES10);
+  const blinks = blinkFrames(mood, [30, 60, 170], FRAMES11);
   const bobs = cyclesFor(mood, BOBS3);
   const sway = cyclesFor(mood, SWAY_CYCLES2);
   const glow = cyclesFor(mood, GLOW_CYCLES);
   const jet = cyclesFor(mood, JET_CYCLES);
   const arm = cyclesFor(mood, ARM_CYCLES);
-  return Array.from({ length: FRAMES10 }, (_, i) => {
+  return Array.from({ length: FRAMES11 }, (_, i) => {
     const beeping = i >= BEEP_START && i <= BEEP_END;
     const progress = beeping ? (i - BEEP_START) / (BEEP_END - BEEP_START) : 0;
     const hop = beeping ? 5 * k * Math.sin(Math.PI * progress) : 0;
     return {
       x: x[i],
-      y: y[i] + 2.4 * k * Math.sin(TAU * bobs * i / FRAMES10) - hop,
+      y: y[i] + 2.4 * k * Math.sin(TAU * bobs * i / FRAMES11) - hop,
       look: look[i],
       lean: lean[i],
       wiggle: beeping ? 1.5 * k * Math.sin(TAU * PINGS * progress) : 0,
-      sway: 1.6 * k * Math.sin(TAU * sway * i / FRAMES10),
+      sway: 1.6 * k * Math.sin(TAU * sway * i / FRAMES11),
       beep: beeping ? clamp(Math.min(i - BEEP_START, BEEP_END - i) / 4, 0, 1) : 0,
       ping: beeping ? progress * PINGS % 1 : -1,
-      jet: TAU * jet * i / FRAMES10,
+      jet: TAU * jet * i / FRAMES11,
       flicker: i % 2 === 0 ? 0 : 1,
-      arm: TAU * arm * i / FRAMES10,
-      lit: beeping || Math.sin(TAU * glow * i / FRAMES10) > 0,
+      arm: TAU * arm * i / FRAMES11,
+      lit: beeping || Math.sin(TAU * glow * i / FRAMES11) > 0,
       blink: blinks.has(i)
     };
   });
@@ -4327,11 +4693,11 @@ function shade(canvas, shape, low, high) {
   canvas.fill(shape.minus(shape.moved(-2, -2)), low);
   canvas.fill(shape.minus(shape.moved(1, 2)), high);
 }
-function renderSprite8(pose, traits) {
+function renderSprite9(pose, traits) {
   const { stage, marks } = traits;
   const k = STAGE_SCALE[stage];
   const s = (v) => round(v * k);
-  const canvas = new Canvas(LOCAL8, LOCAL8);
+  const canvas = new Canvas(LOCAL9, LOCAL9);
   const headX = ORIGIN7 + round(pose.lean / 2) + round(pose.wiggle);
   const baseX = ORIGIN7 - round(pose.lean / 2);
   const box2 = (centre, half, top, bottom, radius2) => roundRect(canvas.mask(), centre - s(half), ORIGIN7 + s(top), centre + s(half), ORIGIN7 + s(bottom), Math.max(1, s(radius2)));
@@ -4344,25 +4710,25 @@ function renderSprite8(pose, traits) {
     for (let x = -half; x <= half; x++) flame.addPixel(baseX + x, padBottom + 1 + row);
     if (row < flameLength - 1 && (row > 0 || pose.flicker === 0)) core.addPixel(baseX, padBottom + 1 + row);
   }
-  canvas.fill(flame, C10.glow);
-  canvas.fill(core, C10.glowHi);
+  canvas.fill(flame, C11.glow);
+  canvas.fill(core, C11.glowHi);
   const pad = box2(baseX, 7, 16, 19, 1.5);
-  canvas.sticker(pad, C10.steel, C10.line);
-  canvas.fill(pad.minus(pad.moved(0, -1)), C10.steelLo);
+  canvas.sticker(pad, C11.steel, C11.line);
+  canvas.fill(pad.minus(pad.moved(0, -1)), C11.steelLo);
   const body = box2(baseX, 9, 2, 16, 4);
-  canvas.sticker(body, C10.body, C10.line);
-  shade(canvas, body, C10.bodyLo, C10.bodyHi);
+  canvas.sticker(body, C11.body, C11.line);
+  shade(canvas, body, C11.bodyLo, C11.bodyHi);
   const panel = box2(baseX, 5, 6, 13, 1);
-  canvas.fill(panel, C10.steel);
-  canvas.fill(panel.minus(panel.moved(0, -1)), C10.steelLo);
+  canvas.fill(panel, C11.steel);
+  canvas.fill(panel.minus(panel.moved(0, -1)), C11.steelLo);
   const lights = canvas.mask();
   const lightSize = stage < 2 ? 1 : 2;
-  for (const dx of MARKS6[marks]) {
+  for (const dx of MARKS7[marks]) {
     const x = baseX + s(dx) - (lightSize === 2 ? 1 : 0);
     const y = ORIGIN7 + s(9) - (lightSize === 2 ? 1 : 0);
     for (let n = 0; n < lightSize; n++) for (let m = 0; m < lightSize; m++) lights.addPixel(x + n, y + m);
   }
-  canvas.fill(lights, C10.glow);
+  canvas.fill(lights, C11.glow);
   const arms = canvas.mask();
   for (const side of [-1, 1]) {
     const shoulderX = baseX + side * s(10);
@@ -4376,8 +4742,8 @@ function renderSprite8(pose, traits) {
       arms.addDisc(shoulderX + (handX - shoulderX) * t, shoulderY + (handY - shoulderY) * t, Math.max(1.2, 2.1 * k));
     }
   }
-  canvas.sticker(arms, C10.steel, C10.line);
-  canvas.fill(arms.minus(arms.moved(-1, -1)), C10.steelLo);
+  canvas.sticker(arms, C11.steel, C11.line);
+  canvas.fill(arms.minus(arms.moved(-1, -1)), C11.steelLo);
   const ears = canvas.mask();
   for (const side of [-1, 1]) {
     ears.add(
@@ -4391,25 +4757,25 @@ function renderSprite8(pose, traits) {
       )
     );
   }
-  canvas.sticker(ears, C10.steel, C10.line);
-  canvas.fill(ears.minus(ears.moved(-1, 0)), C10.steelLo);
+  canvas.sticker(ears, C11.steel, C11.line);
+  canvas.fill(ears.minus(ears.moved(-1, 0)), C11.steelLo);
   const head = box2(headX, 14, -17, 3, 5);
-  canvas.sticker(head, C10.body, C10.line);
-  shade(canvas, head, C10.bodyLo, C10.bodyHi);
+  canvas.sticker(head, C11.body, C11.line);
+  shade(canvas, head, C11.bodyLo, C11.bodyHi);
   const screen = box2(headX, 10, -13, -1, 2);
-  canvas.fill(screen, C10.screen);
-  drawFace4(canvas, pose, headX, s, stage);
+  canvas.fill(screen, C11.screen);
+  drawFace5(canvas, pose, headX, s, stage);
   const tipX = headX + round(pose.sway);
   const tipY = ORIGIN7 + s(-25);
   const stalk = canvas.mask().addLine([
     [headX, ORIGIN7 + s(-17)],
     [tipX, tipY]
   ]);
-  canvas.sticker(stalk, C10.steel, C10.line);
+  canvas.sticker(stalk, C11.steel, C11.line);
   const radius = Math.max(1.6, 2.8 * k) + pose.beep * k;
   const tip = canvas.mask().addDisc(tipX, tipY, radius);
-  canvas.sticker(tip, C10.glow, C10.line);
-  if (pose.lit) canvas.fill(canvas.mask().addDisc(tipX, tipY, Math.max(0.9, 1.1 * k)), C10.glowHi);
+  canvas.sticker(tip, C11.glow, C11.line);
+  if (pose.lit) canvas.fill(canvas.mask().addDisc(tipX, tipY, Math.max(0.9, 1.1 * k)), C11.glowHi);
   if (pose.ping >= 0) {
     const ring = canvas.mask();
     const reach = radius + 2 + 3.5 * k * pose.ping;
@@ -4417,17 +4783,17 @@ function renderSprite8(pose, traits) {
       const angle = Math.PI * n / 4;
       ring.addPixel(tipX + round(Math.cos(angle) * reach), tipY + round(Math.sin(angle) * reach));
     }
-    canvas.fill(ring, C10.glow);
+    canvas.fill(ring, C11.glow);
   }
-  canvas.strengthenEdges([[C10.line, C10.rim]]);
+  canvas.strengthenEdges([[C11.line, C11.rim]]);
   return canvas;
 }
-function drawFace4(canvas, pose, headX, s, stage) {
+function drawFace5(canvas, pose, headX, s, stage) {
   const cx = headX + round(pose.look);
   const top = ORIGIN7 + s(-9);
   const width = EYE_WIDTH2[stage];
   const height = EYE_HEIGHT2[stage];
-  const gap = EYE_GAP4[stage];
+  const gap = EYE_GAP5[stage];
   if (pose.beep > 0.5) {
     const art = stage < 2 ? SMALL_HEART : BIG_HEART;
     const heart = canvas.mask();
@@ -4438,8 +4804,8 @@ function drawFace4(canvas, pose, headX, s, stage) {
       }
     });
     glint.addPixel(headX - (art[0].length >> 1) + 1, top);
-    canvas.fill(heart, C10.heart);
-    canvas.fill(glint, C10.white);
+    canvas.fill(heart, C11.heart);
+    canvas.fill(glint, C11.white);
     return;
   }
   const eyes = canvas.mask();
@@ -4453,8 +4819,8 @@ function drawFace4(canvas, pose, headX, s, stage) {
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) eyes.addPixel(left + x, top + y);
     if (stage >= 2) glints.addPixel(left, top);
   }
-  canvas.fill(eyes, C10.eye);
-  canvas.fill(glints, C10.white);
+  canvas.fill(eyes, C11.eye);
+  canvas.fill(glints, C11.white);
   if (stage >= 1) {
     const mouth = canvas.mask();
     const y = top + height + (stage < 2 ? 1 : 2);
@@ -4463,18 +4829,18 @@ function drawFace4(canvas, pose, headX, s, stage) {
     } else {
       mouth.addPixel(cx - 2, y - 1).addPixel(cx - 1, y).addPixel(cx, y).addPixel(cx + 1, y).addPixel(cx + 2, y - 1);
     }
-    canvas.fill(mouth, C10.eye);
+    canvas.fill(mouth, C11.eye);
   }
 }
 function spriteOffset6(pose) {
   return [round(pose.x) - ORIGIN7, round(pose.y) - ORIGIN7];
 }
-var prepare9 = perTraits((traits) => {
+var prepare10 = perTraits((traits) => {
   const k = STAGE_SCALE[traits.stage];
-  const poses = buildPoses9(traits);
+  const poses = buildPoses10(traits);
   const sparks = makeSparks(
     SPARKS,
-    FRAMES10,
+    FRAMES11,
     (birth) => {
       const pose = poses[birth];
       return [pose.x + (birth % 5 - 2) * k, pose.y + 24 * k];
@@ -4483,20 +4849,20 @@ var prepare9 = perTraits((traits) => {
   );
   return { poses, sparks };
 });
-function draw10(index, traits) {
-  const { poses, sparks } = prepare9(traits);
-  const frame = new Canvas(WIDTH10, HEIGHT10);
-  forEachSpark(sparks, index, FRAMES10, (x, y, age) => {
+function draw11(index, traits) {
+  const { poses, sparks } = prepare10(traits);
+  const frame = new Canvas(WIDTH11, HEIGHT11);
+  forEachSpark(sparks, index, FRAMES11, (x, y, age) => {
     const dots = age < 0.5 ? [[x, y], [x, y + 1]] : [[x, y]];
     for (const [px, py] of dots) {
-      if (px >= MARGIN10 && px < WIDTH10 - MARGIN10 && py >= MARGIN10 && py < HEIGHT10 - MARGIN10) {
-        frame.pixels[py * WIDTH10 + px] = C10.glow;
+      if (px >= MARGIN11 && px < WIDTH11 - MARGIN11 && py >= MARGIN11 && py < HEIGHT11 - MARGIN11) {
+        frame.pixels[py * WIDTH11 + px] = C11.glow;
       }
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset6(pose);
-  renderSprite8(pose, traits).stampOnto(frame, ox, oy, MARGIN10);
+  renderSprite9(pose, traits).stampOnto(frame, ox, oy, MARGIN11);
   return frame.pixels;
 }
 var robot = defineCritter({
@@ -4504,12 +4870,12 @@ var robot = defineCritter({
   name: "Little robot",
   blurb: "Hovers about, and stops once a loop to beep and show a heart.",
   alt: "Animated pixel art of a little hovering robot with a screen for a face, drifting around the frame and stopping to beep and show a heart",
-  width: WIDTH10,
-  height: HEIGHT10,
-  frames: FRAMES10,
+  width: WIDTH11,
+  height: HEIGHT11,
+  frames: FRAMES11,
   delayMs: 60,
   poster: 12,
-  colourNames: COLOUR_NAMES10,
+  colourNames: COLOUR_NAMES11,
   bodyColour: "body",
   accentColours: ["glow", "glowHi"],
   fixedColours: ["steel", "steelLo", "screen", "eye", "white", "heart"],
@@ -4573,17 +4939,17 @@ var robot = defineCritter({
       }
     }
   ],
-  draw: draw10
+  draw: draw11
 });
 
 // src/critters/turtle.ts
-var WIDTH11 = 180;
-var HEIGHT11 = 120;
-var FRAMES11 = 200;
-var MARGIN11 = 2;
+var WIDTH12 = 180;
+var HEIGHT12 = 120;
+var FRAMES12 = 200;
+var MARGIN12 = 2;
 var BUBBLES3 = 20;
-var LOCAL9 = 80;
-var ORIGIN8 = LOCAL9 / 2;
+var LOCAL10 = 80;
+var ORIGIN8 = LOCAL10 / 2;
 var SHELL_RX = 17;
 var SHELL_RY = 12;
 var PLASTRON = 3;
@@ -4599,7 +4965,7 @@ var HAPPY_END = 150;
 var STILL_FROM = 96;
 var STILL_TO = 130;
 var STILL_EASE = 8;
-var WAYPOINTS8 = [
+var WAYPOINTS9 = [
   [58, 70],
   [78, 46],
   [108, 40],
@@ -4607,7 +4973,7 @@ var WAYPOINTS8 = [
   [116, 84],
   [84, 88]
 ];
-var MARKS7 = [
+var MARKS8 = [
   [],
   [[0, -7]],
   [
@@ -4629,7 +4995,7 @@ var PLATES = [
   [6, -2.5],
   [18, -2.5]
 ];
-var COLOUR_NAMES11 = [
+var COLOUR_NAMES12 = [
   "rim",
   "line",
   "shell",
@@ -4648,7 +5014,7 @@ var COLOUR_NAMES11 = [
   "mouth",
   "bubble"
 ];
-var C11 = colourIndexes(COLOUR_NAMES11);
+var C12 = colourIndexes(COLOUR_NAMES12);
 var ease = (t) => {
   const u = clamp(t, 0, 1);
   return u * u * (3 - 2 * u);
@@ -4663,55 +5029,55 @@ function headOut(i) {
   return 1 - tucked + overshoot * (1 - tucked);
 }
 function pace() {
-  const rate = new Float64Array(FRAMES11);
-  for (let i = 0; i < FRAMES11; i++) {
+  const rate = new Float64Array(FRAMES12);
+  for (let i = 0; i < FRAMES12; i++) {
     const into = ease((i - STILL_FROM) / STILL_EASE);
     const out = ease((STILL_TO - i) / STILL_EASE);
     rate[i] = 1 - Math.min(into, out);
   }
   return rate;
 }
-function sample(values, at) {
+function sample2(values, at) {
   const n = values.length;
   const low = Math.floor(at);
   const f = at - low;
   return values[(low % n + n) % n] * (1 - f) + values[((low + 1) % n + n) % n] * f;
 }
-function buildPoses10({ mood }) {
-  const path = roam(WAYPOINTS8, mood, FRAMES11);
+function buildPoses11({ mood }) {
+  const path = roam(WAYPOINTS9, mood, FRAMES12);
   const rate = pace();
   const total = rate.reduce((sum2, v) => sum2 + v, 0);
-  const progress = new Float64Array(FRAMES11);
+  const progress = new Float64Array(FRAMES12);
   let sum = 0;
-  for (let i = 0; i < FRAMES11; i++) {
-    progress[i] = sum * FRAMES11 / total;
+  for (let i = 0; i < FRAMES12; i++) {
+    progress[i] = sum * FRAMES12 / total;
     sum += rate[i];
   }
-  const x = progress.map((p) => sample(path.x, p));
-  const y = progress.map((p) => sample(path.y, p));
-  const vx = new Float64Array(FRAMES11);
-  const speed = new Float64Array(FRAMES11);
-  for (let i = 0; i < FRAMES11; i++) {
-    const next = (i + 1) % FRAMES11;
-    const previous = (i - 1 + FRAMES11) % FRAMES11;
+  const x = progress.map((p) => sample2(path.x, p));
+  const y = progress.map((p) => sample2(path.y, p));
+  const vx = new Float64Array(FRAMES12);
+  const speed = new Float64Array(FRAMES12);
+  for (let i = 0; i < FRAMES12; i++) {
+    const next = (i + 1) % FRAMES12;
+    const previous = (i - 1 + FRAMES12) % FRAMES12;
     vx[i] = (x[next] - x[previous]) / 2;
     speed[i] = Math.hypot(x[next] - x[i], y[next] - y[i]);
   }
   const heading = smooth(vx, 9);
-  const facing = new Array(FRAMES11);
+  const facing = new Array(FRAMES12);
   const first = heading.findIndex((v) => Math.abs(v) > 0.05);
   let face = heading[first] > 0 ? 1 : -1;
-  for (let n = 0; n < FRAMES11; n++) {
-    const i = (first + n) % FRAMES11;
+  for (let n = 0; n < FRAMES12; n++) {
+    const i = (first + n) % FRAMES12;
     if (Math.abs(heading[i]) > 0.05) face = heading[i] > 0 ? 1 : -1;
     facing[i] = face;
   }
   const distance = speed.reduce((s, v) => s + v, 0);
   const steps = Math.max(1, round(distance / STRIDE));
   const step2 = cumulativePhase(speed, steps);
-  const blinks = blinkFrames(mood, [30, 64, 168], FRAMES11);
+  const blinks = blinkFrames(mood, [30, 64, 168], FRAMES12);
   const wags = cyclesFor(mood, TAIL_WAGS);
-  return Array.from({ length: FRAMES11 }, (_, i) => {
+  return Array.from({ length: FRAMES12 }, (_, i) => {
     const hop = i >= POP_START && i <= HOP_END ? Math.sin(Math.PI * (i - POP_START) / (HOP_END - POP_START)) : 0;
     const tremble = tuck(i) > 0.95 ? [0, 1, 0, -1][i % 4] : 0;
     return {
@@ -4721,7 +5087,7 @@ function buildPoses10({ mood }) {
       out: headOut(i),
       legs: 1 - ease((tuck(i) - 0.15) / 0.6),
       step: step2[i],
-      wag: TAU * wags * i / FRAMES11,
+      wag: TAU * wags * i / FRAMES12,
       happy: i >= HAPPY_START && i <= HAPPY_END,
       blink: blinks.has(i) && tuck(i) === 0
     };
@@ -4746,7 +5112,7 @@ function shellMasks(canvas, k) {
 function drawShell2(canvas, k) {
   const { dome, plastron } = shellMasks(canvas, k);
   const whole = canvas.mask().add(dome).add(plastron);
-  canvas.sticker(whole, C11.shell, C11.line);
+  canvas.sticker(whole, C12.shell, C12.line);
   const plates = canvas.mask();
   const seams = canvas.mask();
   const spread = Math.max(k, 0.8);
@@ -4769,25 +5135,25 @@ function drawShell2(canvas, k) {
   }
   const inner = dome.moved(1, 0).and(dome.moved(-1, 0)).and(dome.moved(0, 1)).and(dome.moved(0, -1));
   const rim = dome.minus(inner);
-  canvas.fill(plates.and(inner), C11.scute);
-  canvas.fill(seams.and(inner), C11.shellLo);
-  canvas.fill(plates.and(inner).minus(plates.moved(1, 1)), C11.scuteHi);
-  canvas.fill(rim, C11.shell);
-  canvas.fill(dome.minus(dome.moved(1, 2)), C11.shellHi);
-  canvas.fill(plastron, C11.plastron);
-  canvas.fill(plastron.minus(plastron.moved(0, -1)), C11.plastronLo);
-  canvas.fill(plastron.minus(plastron.moved(0, 1)), C11.shellLo);
+  canvas.fill(plates.and(inner), C12.scute);
+  canvas.fill(seams.and(inner), C12.shellLo);
+  canvas.fill(plates.and(inner).minus(plates.moved(1, 1)), C12.scuteHi);
+  canvas.fill(rim, C12.shell);
+  canvas.fill(dome.minus(dome.moved(1, 2)), C12.shellHi);
+  canvas.fill(plastron, C12.plastron);
+  canvas.fill(plastron.minus(plastron.moved(0, -1)), C12.plastronLo);
+  canvas.fill(plastron.minus(plastron.moved(0, 1)), C12.shellLo);
   return dome;
 }
 function drawStuds(canvas, k, marks) {
   const studs = canvas.mask();
-  for (const [dx, dy] of MARKS7[marks]) {
+  for (const [dx, dy] of MARKS8[marks]) {
     const x = ORIGIN8 + round(dx * k);
     const y = ORIGIN8 + round(dy * k);
     studs.addPixel(x, y).addPixel(x - 1, y).addPixel(x + 1, y);
     if (k >= 0.7) studs.addPixel(x, y - 1).addPixel(x, y + 1);
   }
-  canvas.fill(studs, C11.white);
+  canvas.fill(studs, C12.white);
 }
 function drawLegs(canvas, pose, k, near) {
   if (pose.legs < 0.2) return;
@@ -4805,8 +5171,8 @@ function drawLegs(canvas, pose, k, near) {
       legs.addDisc(ORIGIN8 + hipX + swing * s, ORIGIN8 + hipY + reach * s + 0.5, radius * (1 - 0.15 * s));
     }
   }
-  canvas.sticker(legs, near ? C11.skin : C11.skinLo, C11.line);
-  if (near) canvas.fill(legs.minus(legs.moved(0, 1)), C11.skinHi);
+  canvas.sticker(legs, near ? C12.skin : C12.skinLo, C12.line);
+  if (near) canvas.fill(legs.minus(legs.moved(0, 1)), C12.skinHi);
 }
 function drawTail2(canvas, pose, k) {
   const tail = canvas.mask();
@@ -4817,7 +5183,7 @@ function drawTail2(canvas, pose, k) {
     [ORIGIN8 - 13 * k - reach, ORIGIN8 - 0.5 * k + wag],
     [ORIGIN8 - 13 * k, ORIGIN8 + 1.5 * k]
   ]);
-  canvas.sticker(tail, C11.skinLo, C11.line);
+  canvas.sticker(tail, C12.skinLo, C12.line);
 }
 function drawHead4(canvas, pose, k) {
   const out = pose.out;
@@ -4831,9 +5197,9 @@ function drawHead4(canvas, pose, k) {
     const s = n / 4;
     skin.addDisc(ORIGIN8 + 10 * k + (hx - ORIGIN8 - 10 * k) * s, ORIGIN8 - 3 * k + (hy - ORIGIN8 + 3 * k) * s, 3.6 * k);
   }
-  canvas.sticker(skin, C11.skin, C11.line);
-  canvas.fill(skin.minus(skin.moved(0, 1)), C11.skinHi);
-  canvas.fill(skin.minus(skin.moved(0, -1)), C11.skinLo);
+  canvas.sticker(skin, C12.skin, C12.line);
+  canvas.fill(skin.minus(skin.moved(0, 1)), C12.skinHi);
+  canvas.fill(skin.minus(skin.moved(0, -1)), C12.skinLo);
   if (out < 0.55) return;
   const ex = round(hx + 1.8 * k);
   const ey = round(hy - 2.4 * k);
@@ -4848,21 +5214,21 @@ function drawHead4(canvas, pose, k) {
     for (let y = 0; y < tall; y++) eyes.addPixel(ex, ey + y).addPixel(ex + 1, ey + y);
     glint.addPixel(ex, ey);
   }
-  canvas.fill(eyes, C11.eye);
-  canvas.fill(glint, C11.white);
+  canvas.fill(eyes, C12.eye);
+  canvas.fill(glint, C12.white);
   const blush = canvas.mask();
   const cheek = ex - (k < 0.8 ? 2 : 3);
   for (let x = 0; x < (k < 0.8 ? 2 : 3); x++) blush.addPixel(cheek + x, ey + tall + 1).addPixel(cheek + x, ey + tall + 2);
-  canvas.fill(blush.and(skin), C11.blush);
+  canvas.fill(blush.and(skin), C12.blush);
   const mouth = canvas.mask();
   const mx = round(hx + 6.2 * k);
   const my = round(hy + 2.6 * k);
   if (pose.happy) {
     for (let x = -2; x <= 0; x++) mouth.addPixel(mx + x, my).addPixel(mx + x, my + 1);
-    canvas.fill(mouth.and(skin), C11.mouth);
+    canvas.fill(mouth.and(skin), C12.mouth);
   } else {
     mouth.addPixel(mx - 2, my).addPixel(mx - 1, my + 1).addPixel(mx, my + 1).addPixel(mx + 1, my);
-    canvas.fill(mouth, C11.line);
+    canvas.fill(mouth, C12.line);
   }
 }
 function mirror(canvas) {
@@ -4874,27 +5240,27 @@ function mirror(canvas) {
   }
   return flipped;
 }
-function renderSprite9(pose, traits) {
+function renderSprite10(pose, traits) {
   const k = STAGE_SCALE[traits.stage];
-  const canvas = new Canvas(LOCAL9, LOCAL9);
+  const canvas = new Canvas(LOCAL10, LOCAL10);
   drawLegs(canvas, pose, k, false);
   drawTail2(canvas, pose, k);
   drawHead4(canvas, pose, k);
   drawLegs(canvas, pose, k, true);
   drawShell2(canvas, k);
   drawStuds(canvas, k, traits.marks);
-  canvas.strengthenEdges([[C11.line, C11.rim]]);
+  canvas.strengthenEdges([[C12.line, C12.rim]]);
   return pose.facing < 0 ? mirror(canvas) : canvas;
 }
 function spriteOffset7(pose) {
   return [round(pose.x) - ORIGIN8, round(pose.y) - ORIGIN8];
 }
-var prepare10 = perTraits((traits) => {
+var prepare11 = perTraits((traits) => {
   const k = STAGE_SCALE[traits.stage];
-  const poses = buildPoses10(traits);
+  const poses = buildPoses11(traits);
   const bubbles2 = makeSparks(
     BUBBLES3,
-    FRAMES11,
+    FRAMES12,
     (birth) => {
       const pose = poses[birth];
       return [pose.x + (birth * 7 % 9 - 4) * k * 1.2, pose.y - (SHELL_RY + 3) * k];
@@ -4903,10 +5269,10 @@ var prepare10 = perTraits((traits) => {
   );
   return { poses, bubbles: bubbles2 };
 });
-function draw11(index, traits) {
-  const { poses, bubbles: bubbles2 } = prepare10(traits);
-  const frame = new Canvas(WIDTH11, HEIGHT11);
-  forEachSpark(bubbles2, index, FRAMES11, (x, y, age) => {
+function draw12(index, traits) {
+  const { poses, bubbles: bubbles2 } = prepare11(traits);
+  const frame = new Canvas(WIDTH12, HEIGHT12);
+  forEachSpark(bubbles2, index, FRAMES12, (x, y, age) => {
     const dots = age < 0.45 ? [[x, y]] : [
       [x - 1, y],
       [x + 1, y],
@@ -4914,14 +5280,14 @@ function draw11(index, traits) {
       [x, y + 1]
     ];
     for (const [px, py] of dots) {
-      if (px >= MARGIN11 && px < WIDTH11 - MARGIN11 && py >= MARGIN11 && py < HEIGHT11 - MARGIN11) {
-        frame.pixels[py * WIDTH11 + px] = C11.bubble;
+      if (px >= MARGIN12 && px < WIDTH12 - MARGIN12 && py >= MARGIN12 && py < HEIGHT12 - MARGIN12) {
+        frame.pixels[py * WIDTH12 + px] = C12.bubble;
       }
     }
   });
   const pose = poses[index];
   const [ox, oy] = spriteOffset7(pose);
-  renderSprite9(pose, traits).stampOnto(frame, ox, oy, MARGIN11);
+  renderSprite10(pose, traits).stampOnto(frame, ox, oy, MARGIN12);
   return frame.pixels;
 }
 var turtle = defineCritter({
@@ -4929,12 +5295,12 @@ var turtle = defineCritter({
   name: "Turtle",
   blurb: "Plods along under a patterned shell, and once a loop ducks inside and pops out grinning.",
   alt: "Animated pixel art of a turtle with a patterned shell, walking around the frame and once a loop ducking into its shell and popping out grinning",
-  width: WIDTH11,
-  height: HEIGHT11,
-  frames: FRAMES11,
+  width: WIDTH12,
+  height: HEIGHT12,
+  frames: FRAMES12,
   delayMs: 60,
   poster: 20,
-  colourNames: COLOUR_NAMES11,
+  colourNames: COLOUR_NAMES12,
   bodyColour: "shell",
   accentColours: ["scute", "scuteHi", "bubble"],
   fixedColours: ["eye", "white", "blush", "plastron", "plastronLo"],
@@ -5010,11 +5376,11 @@ var turtle = defineCritter({
       }
     }
   ],
-  draw: draw11
+  draw: draw12
 });
 
 // src/critters/index.ts
-var critters = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat];
+var critters = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat, penguin];
 function findCritter(id) {
   return critters.find((critter) => critter.id === id);
 }

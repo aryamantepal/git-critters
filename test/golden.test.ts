@@ -40,6 +40,9 @@ const HASHES: Record<string, string> = {
   "bat/dusk": "87963fa6c07353d769d7d32e6ea30008f0f8083d97c73966846d421b003b8d29",
   "bat/cocoa": "6ea2a1cafcc8e25c8124bc7e4b82857f46acca0b97bb4e432bc42f06a95fc789",
   "bat/mist": "d1587629cfa63f5e818e87488455cbb3f53029229966c648a3250b4f9288704d",
+  "penguin/tuxedo": "df750e0e63dcfd0f936e7e7e1152c57517e50e3384c537df70e419b51664560d",
+  "penguin/ice": "af27f8784eb86feaa4f582712b3ce3f0e8454e0a6a6266ef8a5a69cb7e783073",
+  "penguin/gentoo": "d56d5e12818f5c274afe9523829294224f1b3a572d74c343d25fa027910cae8f",
 };
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
