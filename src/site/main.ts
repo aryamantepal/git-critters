@@ -198,11 +198,18 @@ interface CritterTile {
 
 const critterTiles: CritterTile[] = [];
 
+/** Search is intentionally case-insensitive so names match however visitors type them. */
+function normalizeCritterSearch(value: string): string {
+  return value.trim().toLocaleLowerCase();
+}
+
 function filterCritters(): void {
-  const query = critterSearch.value.trim().toLowerCase();
+  const query = normalizeCritterSearch(critterSearch.value);
   let matches = 0;
   for (const tile of critterTiles) {
-    const text = tile.isSurprise ? "surprise me egg" : `${tile.critter.name} ${tile.critter.id}`.toLowerCase();
+    const text = normalizeCritterSearch(
+      tile.isSurprise ? "surprise me egg" : `${tile.critter.name} ${tile.critter.id}`,
+    );
     const visible = !query || text.includes(query);
     tile.label.hidden = !visible;
     if (visible) matches++;

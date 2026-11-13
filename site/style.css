@@ -37,7 +37,7 @@ body {
   color: var(--text);
   font: 15px/1.5 var(--sans);
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: 360px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -85,24 +85,31 @@ legend,
 }
 
 .search-field {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .search-field input {
+  display: block;
   width: 100%;
-  padding: 6px 10px;
-  font: 13px/1.4 var(--sans);
+  min-height: 42px;
+  padding: 10px 12px;
+  font: 14px/1.4 var(--sans);
   color: var(--text);
   background: var(--field);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  box-sizing: border-box;
+  border-radius: 8px;
+  caret-color: var(--accent);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.search-field input:hover {
+  border-color: var(--muted);
 }
 
 .search-field input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 0;
+  outline: 0;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .search-field input::placeholder {
