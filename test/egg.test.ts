@@ -43,13 +43,13 @@ describe("hatching", () => {
 describe("the automatic hatchling", () => {
   test("is the same critter for the same login, whatever its case", () => {
     const locked: Record<string, string> = {
-      octocat: "bat",
-      aryamantepal: "jellyfish",
-      github: "dragon",
-      "ada-lovelace": "jellyfish",
-      "Zoe-9": "frog",
-      sam: "jellyfish",
-      a: "mushroom",
+      octocat: "frog",
+      aryamantepal: "robot",
+      github: "jellyfish",
+      "ada-lovelace": "bat",
+      "Zoe-9": "fox",
+      sam: "turtle",
+      a: "robot",
     };
     for (const [login, critter] of Object.entries(locked)) {
       assert.equal(hatchlingFor(login), critter, login);

@@ -3,6 +3,7 @@ import { axolotl } from "./axolotl.ts";
 import { bat } from "./bat.ts";
 import { cat } from "./cat.ts";
 import { dragon } from "./dragon.ts";
+import { fox } from "./fox.ts";
 import { frog } from "./frog.ts";
 import { ghost } from "./ghost.ts";
 import { jellyfish } from "./jellyfish.ts";
@@ -12,7 +13,7 @@ import { robot } from "./robot.ts";
 import { turtle } from "./turtle.ts";
 
 /** Every critter the Action can draw. To add one, write its file and list it here. */
-export const critters: readonly Critter[] = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat, penguin];
+export const critters: readonly Critter[] = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat, penguin, fox];
 
 export function findCritter(id: string): Critter | undefined {
   return critters.find((critter) => critter.id === id);

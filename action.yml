@@ -10,7 +10,7 @@ inputs:
       Optional legacy override for the critter to draw. Leave it out to start from an egg that
       hatches into the critter chosen from the login. Existing named values and "surprise"
       remain supported for backwards compatibility: dragon, axolotl, jellyfish, ghost, robot,
-      cat, frog, mushroom, turtle, bat and penguin.
+      cat, frog, mushroom, turtle, bat, penguin and fox.
     required: false
     default: ""
   colour:
