@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { readEggContributions } from "../src/action/activity.ts";
-import { crackLevelFor, hasHatched, HATCH_AFTER, SURPRISE_POOL, surpriseFor } from "../src/activity/egg.ts";
+import {
+  crackLevelFor,
+  hasHatched,
+  HATCH_AFTER,
+  HATCHLING_POOL,
+  hatchlingFor,
+  LEGACY_SURPRISE_POOL,
+  legacySurpriseFor,
+} from "../src/activity/egg.ts";
 import { egg } from "../src/critters/egg.ts";
 import { critters } from "../src/critters/index.ts";
 
@@ -32,8 +40,39 @@ describe("hatching", () => {
   });
 });
 
-describe("the surprise", () => {
+describe("the automatic hatchling", () => {
   test("is the same critter for the same login, whatever its case", () => {
+    const locked: Record<string, string> = {
+      octocat: "dragon",
+      aryamantepal: "frog",
+      github: "dragon",
+      "ada-lovelace": "ghost",
+      "Zoe-9": "axolotl",
+      sam: "frog",
+      a: "dragon",
+    };
+    for (const [login, critter] of Object.entries(locked)) {
+      assert.equal(hatchlingFor(login), critter, login);
+      assert.equal(hatchlingFor(login.toUpperCase()), critter, login);
+    }
+  });
+
+  test("can be any current critter, and the pool is frozen", () => {
+    assert.deepEqual([...HATCHLING_POOL], critters.map((critter) => critter.id));
+    assert.ok(Object.isFrozen(HATCHLING_POOL));
+    const reached = new Set(Array.from({ length: 1000 }, (_, n) => hatchlingFor(`user-${n}`)));
+    assert.deepEqual([...reached].sort(), [...HATCHLING_POOL].sort());
+  });
+
+  test("only names critters the Action can draw", () => {
+    for (const id of HATCHLING_POOL) assert.ok(critters.some((c) => c.id === id), id);
+  });
+});
+
+describe("legacy critter: surprise", () => {
+  test("keeps the original four-way username mapping", () => {
+    assert.deepEqual([...LEGACY_SURPRISE_POOL], ["dragon", "axolotl", "jellyfish", "ghost"]);
+    assert.ok(Object.isFrozen(LEGACY_SURPRISE_POOL));
     const locked: Record<string, string> = {
       octocat: "jellyfish",
       aryamantepal: "dragon",
@@ -43,21 +82,7 @@ describe("the surprise", () => {
       sam: "dragon",
       a: "dragon",
     };
-    for (const [login, critter] of Object.entries(locked)) {
-      assert.equal(surpriseFor(login), critter, login);
-      assert.equal(surpriseFor(login.toUpperCase()), critter, login);
-    }
-  });
-
-  test("can be any of the four, and the pool is frozen", () => {
-    assert.deepEqual([...SURPRISE_POOL], ["dragon", "axolotl", "jellyfish", "ghost"]);
-    assert.ok(Object.isFrozen(SURPRISE_POOL));
-    const reached = new Set(Array.from({ length: 200 }, (_, n) => surpriseFor(`user-${n}`)));
-    assert.deepEqual([...reached].sort(), [...SURPRISE_POOL].sort());
-  });
-
-  test("only names critters people can pick", () => {
-    for (const id of SURPRISE_POOL) assert.ok(critters.some((c) => c.id === id), id);
+    for (const [login, critter] of Object.entries(locked)) assert.equal(legacySurpriseFor(login), critter, login);
   });
 });
 

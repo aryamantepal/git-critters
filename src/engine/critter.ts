@@ -11,10 +11,10 @@ export interface Colourway<Name extends string = string> {
 }
 
 export interface CritterDefinition<Name extends string = string> {
-  /** The value people put in their workflow, such as `dragon`. */
+  /** The stable identifier used by the Action, such as `dragon`. */
   id: string;
   name: string;
-  /** One short line for the picker. */
+  /** One short descriptive line for previews and documentation. */
   blurb: string;
   /** Alt text for the image in someone's README. */
   alt: string;

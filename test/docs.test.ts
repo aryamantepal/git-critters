@@ -21,7 +21,7 @@ for (const critter of critters) {
 
 test("the README's example is the workflow the site generates", () => {
   const example = /```yaml\n([\s\S]*?)```/.exec(readme)?.[1];
-  assert.equal(example, workflowFile("dragon", "languages", true));
+  assert.equal(example, workflowFile());
 });
 
 test("the README says when an egg hatches, with the number the code uses", () => {
@@ -50,9 +50,12 @@ test("the preview site has a browser icon", () => {
   assert.ok(existsSync("site/favicon.png"));
 });
 
-test("the preview site has a critter search bar and collapsible traits", () => {
+test("the preview site has searchable previews without an install-time picker", () => {
   const html = readFileSync("site/index.html", "utf8");
-  assert.ok(html.includes('id="critter-search"'), "missing critter search input");
-  assert.ok(html.includes('<details id="try-the-rest"'), "try-the-rest should be a collapsible details element");
-  assert.ok(html.includes('id="no-critters"'), "missing empty search message container");
+  assert.ok(!html.includes('id="critter-search"'), "the species search should be gone");
+  assert.ok(!html.includes('id="critters"'), "the species picker should be gone");
+  assert.ok(html.includes('id="hatchling-search"'), "missing the possible-hatchling search");
+  assert.ok(html.includes('id="possible-hatchlings"'), "missing the hatchling preview gallery");
+  assert.ok(html.includes('id="added-dialog"'), "missing installation confirmation dialog");
+  assert.ok(html.includes('id="added-egg"'), "the confirmation should show the egg");
 });

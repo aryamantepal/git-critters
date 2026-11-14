@@ -10,7 +10,7 @@ import { mushroom } from "./mushroom.ts";
 import { robot } from "./robot.ts";
 import { turtle } from "./turtle.ts";
 
-/** Every critter people can pick. To add one, write its file and list it here. */
+/** Every critter the Action can draw. To add one, write its file and list it here. */
 export const critters: readonly Critter[] = [dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle, bat];
 
 export function findCritter(id: string): Critter | undefined {

@@ -1,20 +1,19 @@
-import type { Critter } from "../engine/critter.ts";
-import { SCALE } from "../engine/critter.ts";
-
 const START = "<!-- git-critters:start -->";
 const END = "<!-- git-critters:end -->";
 
 export const KIT_URL = "https://github.com/aryamantepal/git-critters";
+export const README_CRITTER_WIDTH = 720;
+export const README_CRITTER_ALT = "An evolving pixel-art git-critter";
 
 function escapeAttribute(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
-export function critterBlock(critter: Critter, gifPath: string): string {
+export function critterBlock(gifPath: string): string {
   return [
     START,
     '<p align="center">',
-    `  <img src="${escapeAttribute(gifPath)}" width="${critter.width * SCALE}" alt="${escapeAttribute(critter.alt)}" />`,
+    `  <img src="${escapeAttribute(gifPath)}" width="${README_CRITTER_WIDTH}" alt="${README_CRITTER_ALT}" />`,
     "  <br />",
     `  <sub>Made with <a href="${KIT_URL}">git-critters</a></sub>`,
     "</p>",
@@ -46,15 +45,14 @@ export const OTHER_CREATURE_LEFTOVERS =
   "This takes the place of your git-koi koi. Its workflow will keep redrawing a GIF nobody sees, so delete .github/workflows/koi.yml and the koi folder.";
 
 /**
- * Swap the block in place if one is already there, or take the spot of another
- * creature like git-koi's, or else put it at the top of the README.
+ * Once a marked block exists, it belongs to the user and is preserved byte for byte.
+ * On first setup, take the spot of another creature like git-koi's, or otherwise
+ * put the starter block at the top of the README.
  */
 export function withCritterBlock(readme: string, block: string): string {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
-  if (start !== -1 && end > start) {
-    return readme.slice(0, start) + block + readme.slice(end + END.length);
-  }
+  if (start !== -1 && end > start) return readme;
   const other = otherCreature(readme);
   if (other) return readme.slice(0, other.start) + block + readme.slice(other.end);
   return readme.trim() === "" ? `${block}\n` : `${block}\n\n${readme}`;

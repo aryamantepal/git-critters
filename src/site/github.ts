@@ -70,8 +70,8 @@ export async function lookUpProfile(username: string): Promise<Profile> {
 
 export const CRITTER_SLOT = "critter-slot";
 
-function isCritter(paragraph: Element): boolean {
-  return paragraph.querySelector('img[src$="/critter.gif"]') !== null;
+function isCritter(container: Element): boolean {
+  return container.matches('img[src$="/critter.gif"]') || container.querySelector('img[src$="/critter.gif"]') !== null;
 }
 
 const REMOVE = "script, style, iframe, object, embed, form, link, meta, base";
@@ -128,8 +128,7 @@ export function prepareReadme(html: string, login: string, branch: string): Docu
   });
   const creatures = new Set<Element>();
   root.querySelectorAll('img[src$="/critter.gif"]').forEach((image) => {
-    const paragraph = image.closest("p");
-    if (paragraph) creatures.add(paragraph);
+    creatures.add(image.closest("p") ?? image.closest("a") ?? image);
   });
   root.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href") ?? "";

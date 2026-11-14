@@ -159,13 +159,31 @@ function crackLevelFor(contributions) {
 function hasHatched(contributions) {
   return contributions >= HATCH_AFTER;
 }
-var SURPRISE_POOL = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
-function surpriseFor(login) {
+var HATCHLING_POOL = Object.freeze([
+  "dragon",
+  "axolotl",
+  "jellyfish",
+  "ghost",
+  "robot",
+  "cat",
+  "frog",
+  "mushroom",
+  "turtle",
+  "bat"
+]);
+var LEGACY_SURPRISE_POOL = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
+function hashLogin(login) {
   let hash = 2166136261;
   for (const byte of new TextEncoder().encode(login.toLowerCase())) {
     hash = Math.imul(hash ^ byte, 16777619) >>> 0;
   }
-  return SURPRISE_POOL[hash % SURPRISE_POOL.length];
+  return hash;
+}
+function hatchlingFor(login) {
+  return HATCHLING_POOL[hashLogin(login) % HATCHLING_POOL.length];
+}
+function legacySurpriseFor(login) {
+  return LEGACY_SURPRISE_POOL[hashLogin(login) % LEGACY_SURPRISE_POOL.length];
 }
 
 // src/activity/traits.ts
@@ -5294,14 +5312,16 @@ function needsKeepAlive(latestCommit, now) {
 var START = "<!-- git-critters:start -->";
 var END = "<!-- git-critters:end -->";
 var KIT_URL = "https://github.com/aryamantepal/git-critters";
+var README_CRITTER_WIDTH = 720;
+var README_CRITTER_ALT = "An evolving pixel-art git-critter";
 function escapeAttribute(text) {
   return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
-function critterBlock(critter, gifPath) {
+function critterBlock(gifPath) {
   return [
     START,
     '<p align="center">',
-    `  <img src="${escapeAttribute(gifPath)}" width="${critter.width * SCALE}" alt="${escapeAttribute(critter.alt)}" />`,
+    `  <img src="${escapeAttribute(gifPath)}" width="${README_CRITTER_WIDTH}" alt="${README_CRITTER_ALT}" />`,
     "  <br />",
     `  <sub>Made with <a href="${KIT_URL}">git-critters</a></sub>`,
     "</p>",
@@ -5325,9 +5345,7 @@ var OTHER_CREATURE_LEFTOVERS = "This takes the place of your git-koi koi. Its wo
 function withCritterBlock(readme, block) {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
-  if (start !== -1 && end > start) {
-    return readme.slice(0, start) + block + readme.slice(end + END.length);
-  }
+  if (start !== -1 && end > start) return readme;
   const other = otherCreature(readme);
   if (other) return readme.slice(0, other.start) + block + readme.slice(other.end);
   return readme.trim() === "" ? `${block}
@@ -5373,16 +5391,19 @@ async function lookUp(login, now, forEgg) {
   }
 }
 async function main() {
-  const surprise = input("critter") === SURPRISE;
-  const picked = surprise ? void 0 : findCritter(input("critter"));
-  if (!surprise && !picked) {
+  const critterInput = input("critter");
+  const automatic = critterInput === "";
+  const legacySurprise = critterInput === SURPRISE;
+  const usernameChosen = automatic || legacySurprise;
+  const picked = usernameChosen ? void 0 : findCritter(critterInput);
+  if (!usernameChosen && !picked) {
     fail(`Unknown critter "${input("critter")}". Choose from: ${[...critters.map((c) => c.id), SURPRISE].join(", ")}.`);
   }
   const activity = flag("activity");
-  const eggOn = flag("egg") || surprise;
+  const eggOn = flag("egg") || usernameChosen;
   if (eggOn && !activity) {
     fail(
-      `${surprise ? `critter: ${SURPRISE}` : "egg: true"} needs activity: true, since the egg hatches from your contributions.`
+      `${usernameChosen ? "An automatic hatchling" : "egg: true"} needs activity: true, since the egg hatches from your contributions.`
     );
   }
   const colour = input("colour");
@@ -5390,9 +5411,9 @@ async function main() {
     fail(`colour: ${LANGUAGES_COLOURWAY} draws from your languages, so it needs activity: true.`);
   }
   const fixed = colour !== "" && colour !== LANGUAGES_COLOURWAY;
-  if (fixed && surprise) {
+  if (fixed && usernameChosen) {
     fail(
-      `critter: ${SURPRISE} can't use the fixed colour "${colour}", since each colour belongs to one critter. Use colour: ${LANGUAGES_COLOURWAY}, or leave colour out.`
+      `An automatic hatchling can't use the fixed colour "${colour}", since each colour belongs to one critter. Use colour: ${LANGUAGES_COLOURWAY}, or leave colour out.`
     );
   }
   if (fixed && picked && !picked.colourways.some((way) => way.id === colour)) {
@@ -5442,7 +5463,7 @@ async function main() {
         plan = { critter: egg, colourway: egg.colourways[0].id, traits: FRESH_EGG, message, added: "Added the egg" };
       }
     } else {
-      const critter = picked ?? findCritter(surpriseFor(login));
+      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login));
       let colourway = fixed ? colour : critter.colourways[0].id;
       let traits = DEFAULT_TRAITS;
       if (reading) {
@@ -5454,22 +5475,22 @@ async function main() {
       } else {
         console.log("Drawing the default critter for now.");
       }
-      const hatching = eggOn && readme.includes(egg.alt);
-      const article = /^[aeiou]/i.test(critter.name) ? "an" : "a";
       plan = {
         critter,
         colourway,
         traits,
-        message: hatching ? `critter: the egg hatched into ${article} ${critter.name.toLowerCase()}` : `critter: draw the ${critter.id} for ${yesterday(now)}`,
+        message: `critter: draw the ${critter.id} for ${yesterday(now)}`,
         added: `Added the ${critter.id}`
       };
     }
   }
   (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(gifPath), { recursive: true });
   (0, import_node_fs.writeFileSync)(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
-  (0, import_node_fs.writeFileSync)(readmeName, withCritterBlock(readme, critterBlock(plan.critter, gifPath)));
+  const nextReadme = withCritterBlock(readme, critterBlock(gifPath));
+  const readmeChanged = nextReadme !== readme;
+  if (readmeChanged) (0, import_node_fs.writeFileSync)(readmeName, nextReadme);
   if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
-  git("add", "--force", "--", gifPath, readmeName);
+  git("add", "--force", "--", gifPath, ...readmeChanged ? [readmeName] : []);
   if (git("diff", "--cached", "--name-only").trim() === "") {
     console.log("The critter is already up to date, so there's nothing to commit.");
     if (activity && needsKeepAlive(new Date(git("log", "-1", "--format=%cI").trim()), now)) {

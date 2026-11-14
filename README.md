@@ -1,36 +1,34 @@
 # git-critters
 
-Pixel-art critters for your GitHub profile README. Pick one, see how it looks on your own profile, and add it in one click.
+Pixel-art critters for your GitHub profile README. Add an egg in one click and discover the hatchling chosen from your username.
 
-**[Pick a critter](https://critters.aryamantepal.com)**
+**[Add a critter](https://critters.aryamantepal.com)**
 
 ## How it works
 
-1. On the site, you cycle through the critters and colours. The preview shows them on top of your real README, in GitHub's light and dark themes.
-2. **Add to my profile** opens GitHub's new-file page with one small workflow already filled in.
+1. On the site, enter your GitHub username. The preview shows the egg with your real README content, in GitHub's light and dark themes.
+2. **Add to my GitHub** opens GitHub's new-file page with one small workflow already filled in.
 3. You commit it. Choose "Create a new branch" on that screen if you'd rather review it as a pull request.
-4. The workflow draws the critter, saves `critter.gif`, and adds it to the top of your README. If you already show a koi from [git-koi](https://github.com/yalongwastaken/git-koi), the critter takes its place instead. Your other text stays as it is.
+4. The workflow draws the critter, saves `critter.gif`, and adds a starter block to your README. If you already show a koi from [git-koi](https://github.com/yalongwastaken/git-koi), the critter takes its place instead. Your other text stays as it is.
 5. Every night, just after midnight UTC, it runs again and redraws the critter from your public GitHub activity.
 
 ### The egg
 
-By default the workflow starts with a speckled egg, coloured from your languages, rather than the critter. The egg cracks as you contribute, and hatches into the critter you picked after 25 contributions since you added the workflow. After that it follows the activity rules below.
+The workflow starts with a speckled egg coloured from your languages. The egg cracks as you contribute and reveals your hatchling after 25 contributions since you added the workflow. After that it follows the activity rules below.
 
 The count starts the day you add the workflow, not from your lifetime total, so everyone starts with an egg. The date comes from the first commit of the workflow file, so there's nothing extra stored in your repo.
 
-**Surprise me** means you don't pick. The critter is chosen from your username, and nothing, including the logs, the commit messages and the image's description, says which one until it hatches.
-
-To skip the egg and get the critter straight away, turn off "Start from an egg" on the site, or leave out `egg: true` from the workflow.
+There is no species picker. The critter is deterministically chosen from your username, so the same username always receives the same hatchling. Nothing in the workflow, logs, commit messages or image description says which one it is until it hatches.
 
 There's nothing to sign in to and no server. Everything on the site runs in your browser, and the workflow runs on your repo's own GitHub Actions with its built-in token.
 
 ### What your activity changes
 
-You pick the species. Your activity decides how it looks.
+Your username decides the species. Your activity decides how it looks.
 
 | Activity | Changes | Levels |
 | --- | --- | --- |
-| Languages | Colour | Your most-used language across your public, non-fork repos sets the body colour, and the second sets the accents. Choosing a fixed colour overrides this. |
+| Languages | Colour | Your most-used language across your public, non-fork repos sets the body colour, and the second sets the accents. |
 | Lifetime contributions | Size | Hatchling under 100, young from 100, grown from 1,000, elder from 5,000 |
 | Longest streak in the past year | Marks | None under 7 days, one mark from 7, two from 30, three from 100 |
 | Contributions yesterday (UTC) | Motion | Resting at 0, steady from 1, lively from 5 |
@@ -38,9 +36,9 @@ You pick the species. Your activity decides how it looks.
 
 Marks follow the longest streak, not the current one, so missing a day doesn't take one away, though a streak stops counting once it's more than a year old. Days are UTC.
 
-The site can't read contributions without a token, so its preview uses your real languages and lets you try each size, mark and motion. The real critter comes from your activity when the workflow runs.
+The site can't read contributions without a token, so its preview shows the fresh egg in your real language colours. The real critter comes from your activity when the workflow runs.
 
-If GitHub's data can't be read, the critter you already have stays and the run still passes, with a warning. On a first run it draws the default art, or an uncracked egg if the egg is on.
+If GitHub's data can't be read, the critter you already have stays and the run still passes, with a warning. On a first run it draws an uncracked egg.
 
 Each night's run commits only when the GIF changes, which adds roughly 300 to 800 KB to your profile repo's history each time. If nothing has changed for 50 days, it makes an empty commit, because GitHub turns off scheduled workflows in public repos after 60 days without activity.
 
@@ -49,8 +47,8 @@ Each night's run commits only when the GIF changes, which adds roughly 300 to 80
 Add this to your profile repo (the one named after your username) as `.github/workflows/critter.yml`:
 
 ```yaml
-# Draws a pixel-art critter from your GitHub activity and adds it to the top of this README.
-# To swap it, change the last two lines and commit: https://critters.aryamantepal.com
+# Draws a pixel-art critter from your GitHub activity and adds it to this README.
+# Your username determines which critter is inside the egg: https://critters.aryamantepal.com
 name: Critter
 
 on:
@@ -73,10 +71,9 @@ jobs:
       - uses: aryamantepal/git-critters@v1
         with:
           activity: true
-          egg: true
-          critter: dragon
-          colour: languages
 ```
+
+The site and the workflow above intentionally offer no species choice. For backwards compatibility, the lower-level Action still accepts these older explicit `critter` and `colour` values:
 
 | `critter` | `colour` |
 | --- | --- |
@@ -91,11 +88,27 @@ jobs:
 | `turtle` | `pond`, `honey`, `blueberry` |
 | `bat` | `dusk`, `cocoa`, `mist` |
 
-`colour: languages` colours the critter from your languages, and is what you get if you leave `colour` out while `activity` is on. A colour from the table always wins over languages, and size, marks and motion still apply.
+Leaving `critter` and `colour` out gives you the automatic egg and language colours. Existing workflows with `critter: surprise`, a named critter, `egg`, or a fixed `colour` continue to work, but the site no longer generates those choices.
 
-`egg: true` starts as an egg that hatches into the critter, and needs `activity: true`. Without it you get the critter straight away, so delete the line to skip the egg. `critter: surprise` leaves the choice to the egg, and turns it on whether or not `egg` is there. It needs `activity: true` too, and `colour` has to be `languages` or left out, since each fixed colour belongs to one critter. With a named critter and a fixed `colour`, the egg uses your language colours and the hatched critter uses the fixed one.
+### Customise the README layout
 
-To swap critters, change those two lines and commit. To remove it, delete the workflow, `critter.gif`, and the block between the `git-critters` comments in your README.
+The Action creates the block between `<!-- git-critters:start -->` and `<!-- git-critters:end -->` once. After that, the marked block belongs to you: nightly runs update only `critter.gif` and preserve the README byte for byte. Keep both marker comments and keep the image pointed at `critter.gif`, but move or rewrite everything between them however you like.
+
+GitHub removes custom CSS, inline styles, classes and IDs from rendered Markdown. Use GitHub-supported Markdown and HTML instead, such as image `align` and `width`, tables, `<details>`, and `<picture>`. For example, a borderless side-by-side layout can start with:
+
+```html
+<!-- git-critters:start -->
+<a href="https://github.com/aryamantepal/git-critters">
+  <img align="right" width="240" src="critter.gif" alt="An evolving pixel-art git-critter" />
+</a>
+<!-- git-critters:end -->
+
+# Hi, I'm your name
+
+Your introduction flows beside the critter.
+```
+
+To remove git-critters, delete the workflow, `critter.gif`, and the block between the `git-critters` comments in your README.
 
 **To keep one fixed critter**, set `activity: false` (or remove the line) and delete the `schedule:` lines. Then it draws once, exactly as it always has, and `colour` has to be one from the table.
 
@@ -112,7 +125,7 @@ The rules:
 - Every critter must be an original design.
 - Every motion must complete a whole number of cycles over the loop, so the last frame flows into the first.
 - Draw from `Traits` (`stage`, `marks`, `mood`). `DEFAULT_TRAITS` must give the art you'd ship without them. Size is a re-render of the geometry at `STAGE_SCALE`, inside the same frame. Marks reuse colours you already have and are placed on the body, so they move with it and show at every stage. Mood sets whole-number cycles through `cyclesFor`, how far it roams through `roam`, and how long it keeps its eyes shut through `blinkFrames`. Keep the memo in `perTraits`, so only the latest traits are held.
-- A new critter isn't part of "Surprise me" until you decide it should be. The surprise is chosen by hashing the login into `SURPRISE_POOL` in `src/activity/egg.ts`, which is its own list, not `critters`. Never reorder it or extend it in place, since that changes the critter people have already been promised.
+- A new critter isn't part of automatic hatching until you add it to `HATCHLING_POOL` in `src/activity/egg.ts`. The original four-entry `LEGACY_SURPRISE_POOL` must never change because existing `critter: surprise` workflows still use it; the new no-config flow uses the full current pool.
 - Say which colours are `accentColours` (they take the second language's hue), `fixedColours` (they never change), and `edgeColours` (they reach the silhouette), and which one is the `bodyColour`.
 - Outlines have to show on both white and `#0d1117`, since GIF transparency is all or nothing.
 

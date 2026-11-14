@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { languageColourway, LANGUAGES_COLOURWAY } from "../activity/colourway.ts";
-import { crackLevelFor, hasHatched, HATCH_AFTER, surpriseFor } from "../activity/egg.ts";
+import { crackLevelFor, hasHatched, hatchlingFor, HATCH_AFTER, legacySurpriseFor } from "../activity/egg.ts";
 import { moodFor, traitsFor, yesterday } from "../activity/traits.ts";
 import { egg, FRESH_EGG } from "../critters/egg.ts";
 import { critters, findCritter } from "../critters/index.ts";
@@ -16,7 +16,7 @@ import type { Look } from "./activity.ts";
 import { KEEP_ALIVE_MESSAGE, needsKeepAlive } from "./keepalive.ts";
 import { critterBlock, hasOtherCreature, OTHER_CREATURE_LEFTOVERS, withCritterBlock } from "./readme.ts";
 
-/** The value of `critter` that leaves the choice to the egg. */
+/** The old explicit value that leaves the choice to the egg. Kept for existing workflows. */
 const SURPRISE = "surprise";
 
 function input(name: string): string {
@@ -75,17 +75,20 @@ interface Plan {
 }
 
 async function main(): Promise<void> {
-  const surprise = input("critter") === SURPRISE;
-  const picked = surprise ? undefined : findCritter(input("critter"));
-  if (!surprise && !picked) {
+  const critterInput = input("critter");
+  const automatic = critterInput === "";
+  const legacySurprise = critterInput === SURPRISE;
+  const usernameChosen = automatic || legacySurprise;
+  const picked = usernameChosen ? undefined : findCritter(critterInput);
+  if (!usernameChosen && !picked) {
     fail(`Unknown critter "${input("critter")}". Choose from: ${[...critters.map((c) => c.id), SURPRISE].join(", ")}.`);
   }
 
   const activity = flag("activity");
-  const eggOn = flag("egg") || surprise;
+  const eggOn = flag("egg") || usernameChosen;
   if (eggOn && !activity) {
     fail(
-      `${surprise ? `critter: ${SURPRISE}` : "egg: true"} needs activity: true, ` +
+      `${usernameChosen ? "An automatic hatchling" : "egg: true"} needs activity: true, ` +
         "since the egg hatches from your contributions.",
     );
   }
@@ -96,9 +99,9 @@ async function main(): Promise<void> {
     fail(`colour: ${LANGUAGES_COLOURWAY} draws from your languages, so it needs activity: true.`);
   }
   const fixed = colour !== "" && colour !== LANGUAGES_COLOURWAY;
-  if (fixed && surprise) {
+  if (fixed && usernameChosen) {
     fail(
-      `critter: ${SURPRISE} can't use the fixed colour "${colour}", since each colour belongs to one critter. ` +
+      `An automatic hatchling can't use the fixed colour "${colour}", since each colour belongs to one critter. ` +
         `Use colour: ${LANGUAGES_COLOURWAY}, or leave colour out.`,
     );
   }
@@ -141,7 +144,7 @@ async function main(): Promise<void> {
     }
 
     if (eggOn && (!reading || !hasHatched(reading.sinceAdded))) {
-      // Nothing here may name the surprise, so it isn't worked out until it has hatched.
+      // Nothing here may name the hatchling, so it isn't worked out until it has hatched.
       const message = `critter: draw the egg for ${yesterday(now)}`;
       if (reading) {
         console.log(`Drawing the egg: ${reading.sinceAdded} of ${HATCH_AFTER} contributions.`);
@@ -157,7 +160,7 @@ async function main(): Promise<void> {
         plan = { critter: egg, colourway: egg.colourways[0].id, traits: FRESH_EGG, message, added: "Added the egg" };
       }
     } else {
-      const critter = picked ?? findCritter(surpriseFor(login))!;
+      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login))!;
       let colourway: string | Colourway = fixed ? colour : critter.colourways[0].id;
       let traits: Traits = DEFAULT_TRAITS;
       if (reading) {
@@ -170,16 +173,11 @@ async function main(): Promise<void> {
       } else {
         console.log("Drawing the default critter for now.");
       }
-      // The egg's own block is how a hatching is told from any other night.
-      const hatching = eggOn && readme.includes(egg.alt);
-      const article = /^[aeiou]/i.test(critter.name) ? "an" : "a";
       plan = {
         critter,
         colourway,
         traits,
-        message: hatching
-          ? `critter: the egg hatched into ${article} ${critter.name.toLowerCase()}`
-          : `critter: draw the ${critter.id} for ${yesterday(now)}`,
+        message: `critter: draw the ${critter.id} for ${yesterday(now)}`,
         added: `Added the ${critter.id}`,
       };
     }
@@ -187,11 +185,13 @@ async function main(): Promise<void> {
 
   mkdirSync(dirname(gifPath), { recursive: true });
   writeFileSync(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
-  writeFileSync(readmeName, withCritterBlock(readme, critterBlock(plan.critter, gifPath)));
+  const nextReadme = withCritterBlock(readme, critterBlock(gifPath));
+  const readmeChanged = nextReadme !== readme;
+  if (readmeChanged) writeFileSync(readmeName, nextReadme);
   if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
 
   // Forced, because someone's .gitignore shouldn't stop their critter from appearing.
-  git("add", "--force", "--", gifPath, readmeName);
+  git("add", "--force", "--", gifPath, ...(readmeChanged ? [readmeName] : []));
   if (git("diff", "--cached", "--name-only").trim() === "") {
     console.log("The critter is already up to date, so there's nothing to commit.");
     // Scheduled workflows stop after 60 days of silence, so an unchanged critter still needs a commit now and then.

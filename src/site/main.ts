@@ -1,77 +1,50 @@
-import { languageColourway, LANGUAGES_COLOURWAY } from "../activity/colourway.ts";
-import { HATCH_AFTER } from "../activity/egg.ts";
+import { languageColourway } from "../activity/colourway.ts";
+import { HATCH_AFTER, HATCHLING_POOL } from "../activity/egg.ts";
+import { hasOtherCreature, OTHER_CREATURE_LEFTOVERS } from "../action/readme.ts";
 import { egg, FRESH_EGG } from "../critters/egg.ts";
-import { critters } from "../critters/index.ts";
+import { findCritter } from "../critters/index.ts";
 import { paletteOf, SCALE } from "../engine/critter.ts";
 import type { Colourway, Critter } from "../engine/critter.ts";
-import { encodeGif } from "../engine/gif.ts";
 import { DEFAULT_TRAITS } from "../engine/traits.ts";
 import type { Traits } from "../engine/traits.ts";
 import { CRITTER_SLOT, lookUpProfile, prepareReadme } from "./github.ts";
 import type { Profile } from "./github.ts";
-import { hasOtherCreature, OTHER_CREATURE_LEFTOVERS } from "../action/readme.ts";
-import { addLink, createRepoLink, editLink, isValidUsername } from "./links.ts";
+import { addLink, createRepoLink, isValidUsername } from "./links.ts";
 
 function element<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
 
 const stage = element<HTMLCanvasElement>("stage");
-const critterList = element("critters");
-const critterSearch = element<HTMLInputElement>("critter-search");
-const noCritters = element("no-critters");
-const colourList = element("colours");
-const colourNote = element("colour-note");
-const traitList = element("traits");
-const traitFieldset = element("try-the-rest");
-const eggToggle = element<HTMLInputElement>("egg");
-const eggNote = element("egg-note");
-const blurb = element("blurb");
 const usernameInput = element<HTMLInputElement>("username");
 const addButton = element<HTMLAnchorElement>("add");
 const statusLine = element("status");
-const swapHelp = element("swap-help");
-const swapLines = element("swap-lines");
-const copySwap = element<HTMLButtonElement>("copy-swap");
-const downloadButton = element<HTMLButtonElement>("download");
 const preview = element("preview");
 const pauseButton = element<HTMLButtonElement>("pause");
 const profileName = element("profile-name");
 const readmeContent = element("readme-content");
 const critterParagraph = stage.closest("p") as HTMLElement;
 const sampleReadme = element<HTMLTemplateElement>("sample-readme");
+const addedDialog = element<HTMLDialogElement>("added-dialog");
+const addedEgg = element<HTMLCanvasElement>("added-egg");
+const possibleHatchlings = element("possible-hatchlings");
+const hatchlingSearch = element<HTMLInputElement>("hatchling-search");
+const noHatchlings = element("no-hatchlings");
+const viewReadme = element<HTMLAnchorElement>("view-readme");
+const closeAdded = element<HTMLButtonElement>("close-added");
+const doneAdded = element<HTMLButtonElement>("done-added");
 
 const state = {
-  critter: critters[0],
-  /** "Surprise me" is picked, so only the egg is shown, and nothing says what's inside. */
-  surprise: false,
-  /** Start from an egg. */
-  egg: true,
-  /** When set, the preview shows the egg at this crack level instead of the critter. */
-  eggView: null as 0 | 2 | null,
-  /** Colours from the visitor's languages, which is the default, rather than a fixed colourway. */
-  useLanguages: true,
   languages: [] as string[],
-  traits: { ...DEFAULT_TRAITS } as Traits,
   profile: null as Profile | null,
+  previewCritter: egg as Critter,
 };
-const chosenWays = new Map<string, Colourway>(critters.map((c) => [c.id, c.colourways[0]]));
 
-/** Fixed colours belong to one species, so a surprise always uses languages, and so does the egg. */
-function usingLanguages(critter: Critter = state.critter): boolean {
-  return state.surprise || critter === egg || state.useLanguages;
+function eggColourway(): Colourway {
+  return state.languages.length ? languageColourway(egg, state.languages) : egg.colourways[0];
 }
 
-/** What the preview is showing: the critter, or the egg when that's what's being looked at. */
-function shown(): { critter: Critter; traits: Traits } {
-  if (state.surprise) return { critter: egg, traits: FRESH_EGG };
-  if (state.eggView !== null) return { critter: egg, traits: { stage: state.eggView, marks: 0, mood: state.traits.mood } };
-  return { critter: state.critter, traits: state.traits };
-}
-
-/** The colours in use: the visitor's languages if they have any, else the critter's first colourway. */
-function wayFor(critter: Critter): Colourway {
-  if (!usingLanguages(critter)) return chosenWays.get(critter.id)!;
+function colourwayFor(critter: Critter): Colourway {
   return state.languages.length ? languageColourway(critter, state.languages) : critter.colourways[0];
 }
 
@@ -91,8 +64,6 @@ function paint(context: CanvasRenderingContext2D, image: ImageData, pixels: Uint
   context.putImageData(image, 0, 0);
 }
 
-// The preview plays frames live on a canvas rather than a GIF, so changing critter
-// or colour is instant. The GIF only gets encoded when someone downloads one.
 const player = {
   context: stage.getContext("2d")!,
   image: null as ImageData | null,
@@ -101,9 +72,8 @@ const player = {
   last: 0,
   playing: !matchMedia("(prefers-reduced-motion: reduce)").matches,
 
-  load(restart: boolean): void {
-    const { critter } = shown();
-    const way = wayFor(critter);
+  load(): void {
+    const critter = state.previewCritter;
     if (stage.width !== critter.width || stage.height !== critter.height || !this.image) {
       stage.width = critter.width;
       stage.height = critter.height;
@@ -111,25 +81,25 @@ const player = {
     }
     stage.style.width = `${critter.width * SCALE}px`;
     stage.setAttribute("aria-label", critter.alt);
-    this.lookup = colourLookup(critter, way);
-    if (restart) this.index = critter.poster;
+    this.lookup = colourLookup(critter, colourwayFor(critter));
+    this.index = critter.poster;
     this.draw();
   },
 
   draw(): void {
-    const { critter, traits } = shown();
+    const critter = state.previewCritter;
+    const traits = critter === egg ? FRESH_EGG : DEFAULT_TRAITS;
     paint(this.context, this.image!, critter.frame(this.index, traits), this.lookup);
   },
 
   tick(now: number): void {
-    const { delayMs, frames } = shown().critter;
+    const critter = state.previewCritter;
     if (this.playing) {
-      // A tab that was in the background shouldn't try to catch up.
       if (now - this.last > 1000) this.last = now;
-      if (now - this.last >= delayMs) {
-        while (now - this.last >= delayMs) {
-          this.index = (this.index + 1) % frames;
-          this.last += delayMs;
+      if (now - this.last >= critter.delayMs) {
+        while (now - this.last >= critter.delayMs) {
+          this.index = (this.index + 1) % critter.frames;
+          this.last += critter.delayMs;
         }
         this.draw();
       }
@@ -138,16 +108,15 @@ const player = {
   },
 };
 
-/** Draw a critter's poster frame, cropped close and scaled up by a whole number. */
+/** Draw a poster frame cropped close and pixel-scaled into a thumbnail canvas. */
 function drawThumbnail(canvas: HTMLCanvasElement, critter: Critter, way: Colourway, traits: Traits): void {
-  const { width, height } = critter;
   const pixels = critter.frame(critter.poster, traits);
-  let left = width;
+  let left = critter.width;
   let right = 0;
-  let top = height;
+  let top = critter.height;
   let bottom = 0;
-  for (let y = 0, i = 0; y < height; y++) {
-    for (let x = 0; x < width; x++, i++) {
+  for (let y = 0, i = 0; y < critter.height; y++) {
+    for (let x = 0; x < critter.width; x++, i++) {
       if (!pixels[i]) continue;
       left = Math.min(left, x);
       right = Math.max(right, x);
@@ -156,10 +125,15 @@ function drawThumbnail(canvas: HTMLCanvasElement, critter: Critter, way: Colourw
     }
   }
   const full = document.createElement("canvas");
-  full.width = width;
-  full.height = height;
+  full.width = critter.width;
+  full.height = critter.height;
   const fullContext = full.getContext("2d")!;
-  paint(fullContext, fullContext.createImageData(width, height), pixels, colourLookup(critter, way));
+  paint(
+    fullContext,
+    fullContext.createImageData(critter.width, critter.height),
+    pixels,
+    colourLookup(critter, way),
+  );
 
   const context = canvas.getContext("2d")!;
   const boxWidth = right - left + 1;
@@ -180,291 +154,110 @@ function drawThumbnail(canvas: HTMLCanvasElement, critter: Critter, way: Colourw
   );
 }
 
-const thumbnails = new Map<string, HTMLCanvasElement>();
-
-const SURPRISE_BLURB = "An egg that hatches into one of the critters. You find out which when it does.";
-
-function drawThumbnails(): void {
-  for (const critter of critters) drawThumbnail(thumbnails.get(critter.id)!, critter, wayFor(critter), state.traits);
-  drawThumbnail(thumbnails.get(egg.id)!, egg, wayFor(egg), FRESH_EGG);
-}
-
-interface CritterTile {
+interface HatchlingCard {
   critter: Critter;
-  isSurprise: boolean;
-  label: HTMLLabelElement;
-  radio: HTMLInputElement;
+  button: HTMLButtonElement;
+  canvas: HTMLCanvasElement;
 }
 
-const critterTiles: CritterTile[] = [];
+const hatchlingCards: HatchlingCard[] = [];
 
-/** Search is intentionally case-insensitive so names match however visitors type them. */
-function normalizeCritterSearch(value: string): string {
-  return value.trim().toLocaleLowerCase();
+function choosePreview(critter: Critter): void {
+  state.previewCritter = critter;
+  for (const card of hatchlingCards) card.button.setAttribute("aria-pressed", String(card.critter === critter));
+  refreshPreview();
 }
 
-function filterCritters(): void {
-  const query = normalizeCritterSearch(critterSearch.value);
-  let matches = 0;
-  for (const tile of critterTiles) {
-    const text = normalizeCritterSearch(
-      tile.isSurprise ? "surprise me egg" : `${tile.critter.name} ${tile.critter.id}`,
-    );
-    const visible = !query || text.includes(query);
-    tile.label.hidden = !visible;
-    if (visible) matches++;
-  }
-  noCritters.hidden = matches > 0;
-}
-
-function buildCritterList(): void {
-  critterTiles.length = 0;
-  critterList.replaceChildren();
-  // The egg is the fifth tile, for "Surprise me".
-  for (const critter of [...critters, egg]) {
-    const isSurprise = critter === egg;
-    const label = document.createElement("label");
-    label.className = isSurprise ? "critter surprise" : "critter";
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = "critter";
-    radio.value = isSurprise ? "surprise" : critter.id;
-    radio.checked = isSurprise ? state.surprise : !state.surprise && critter === state.critter;
-    radio.addEventListener("change", () => (isSurprise ? chooseSurprise() : choose(critter)));
+function buildPossibleHatchlings(): void {
+  hatchlingCards.length = 0;
+  possibleHatchlings.replaceChildren();
+  for (const id of HATCHLING_POOL) {
+    const critter = findCritter(id)!;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "hatchling-card";
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-label", `Preview ${critter.name}`);
+    button.addEventListener("click", () => choosePreview(critter));
     const canvas = document.createElement("canvas");
     canvas.width = 168;
     canvas.height = 128;
     canvas.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
-    name.textContent = isSurprise ? "Surprise me" : critter.name;
-    label.append(radio, canvas, name);
-    critterList.append(label);
-    thumbnails.set(critter.id, canvas);
-    critterTiles.push({ critter, isSurprise, label, radio });
-  }
-  filterCritters();
-  drawThumbnails();
-}
-
-function buildColourList(): void {
-  colourList.replaceChildren();
-  const { critter } = state;
-  const chosen = chosenWays.get(critter.id)!;
-  const options: [string, Colourway, () => void][] = [
-    ["My languages", wayFor(state.surprise ? egg : critter), () => chooseColour(null)],
-    ...(state.surprise
-      ? []
-      : critter.colourways.map((way): [string, Colourway, () => void] => [way.name, way, () => chooseColour(way)])),
-  ];
-  options.forEach(([name, way, pick], n) => {
-    const label = document.createElement("label");
-    label.className = "colour";
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = "colour";
-    radio.value = n === 0 ? LANGUAGES_COLOURWAY : way.id;
-    radio.checked = n === 0 ? usingLanguages() : !usingLanguages() && way.id === chosen.id;
-    radio.addEventListener("change", pick);
-    const swatch = document.createElement("span");
-    swatch.className = "swatch";
-    swatch.style.setProperty("--swatch", swatchOf(way));
-    const text = document.createElement("span");
-    text.textContent = name;
-    label.append(radio, swatch, text);
-    colourList.append(label);
-  });
-}
-
-function renderColourNote(): void {
-  const whose = state.surprise ? "the egg's" : `${state.critter.name}'s`;
-  if (!usingLanguages()) {
-    colourNote.textContent = "";
-  } else if (state.languages.length) {
-    colourNote.textContent = `Coloured from your most-used languages: ${state.languages.join(" and ")}.`;
-  } else if (state.profile) {
-    colourNote.textContent = `No languages to colour from, so this shows ${whose} first colours.`;
-  } else {
-    colourNote.textContent = `Enter your username to colour it from your languages. Until then this shows ${whose} first colours.`;
+    name.textContent = critter.name;
+    button.append(canvas, name);
+    possibleHatchlings.append(button);
+    hatchlingCards.push({ critter, button, canvas });
   }
 }
 
-const TRAIT_ROWS = [
-  { key: "stage", label: "Size", options: ["Hatchling", "Young", "Grown", "Elder"] },
-  { key: "marks", label: "Marks", options: ["None", "7 days", "30 days", "100 days"] },
-  { key: "mood", label: "Yesterday", options: ["Resting", "Steady", "Lively"] },
-] as const;
-
-/** With the egg on, Size starts with the egg, so people can see it. The numbers are crack levels. */
-const EGG_VIEWS = [
-  { text: "Egg", level: 0 },
-  { text: "Cracking", level: 2 },
-] as const;
-
-interface TraitOption {
-  text: string;
-  checked: boolean;
-  pick: () => void;
-}
-
-function buildTraitList(): void {
-  traitList.replaceChildren();
-  for (const row of TRAIT_ROWS) {
-    const group = document.createElement("div");
-    group.className = "trait-row";
-    group.setAttribute("role", "radiogroup");
-    group.setAttribute("aria-label", row.label);
-    const heading = document.createElement("span");
-    heading.className = "trait-name";
-    heading.setAttribute("aria-hidden", "true");
-    heading.textContent = row.label;
-    const options = document.createElement("div");
-    options.className = "colours";
-    const choices: TraitOption[] = row.options.map((text, n) => {
-      const value = row.key === "mood" ? text.toLowerCase() : n;
-      return {
-        text,
-        checked: state.traits[row.key] === value && (row.key !== "stage" || state.eggView === null),
-        pick() {
-          Object.assign(state.traits, { [row.key]: value });
-          if (row.key === "stage") state.eggView = null;
-        },
-      };
-    });
-    if (row.key === "stage" && state.egg) {
-      choices.unshift(
-        ...EGG_VIEWS.map(({ text, level }) => ({
-          text,
-          checked: state.eggView === level,
-          pick() {
-            state.eggView = level;
-          },
-        })),
-      );
-    }
-    for (const choice of choices) {
-      const label = document.createElement("label");
-      label.className = "colour plain";
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.name = `trait-${row.key}`;
-      radio.checked = choice.checked;
-      radio.addEventListener("change", () => {
-        choice.pick();
-        player.load(false);
-        drawThumbnails();
-      });
-      const span = document.createElement("span");
-      span.textContent = choice.text;
-      label.append(radio, span);
-      options.append(label);
-    }
-    group.append(heading, options);
-    traitList.append(group);
+function drawPossibleHatchlings(): void {
+  for (const { critter, canvas } of hatchlingCards) {
+    drawThumbnail(canvas, critter, colourwayFor(critter), DEFAULT_TRAITS);
   }
 }
 
-/** The colour that says the most about a colourway. */
-function swatchOf(way: Colourway): string {
+function filterHatchlings(): void {
+  const query = hatchlingSearch.value.trim().toLocaleLowerCase();
+  let matches = 0;
+  for (const { critter, button } of hatchlingCards) {
+    const visible = !query || `${critter.name} ${critter.id}`.toLocaleLowerCase().includes(query);
+    button.hidden = !visible;
+    if (visible) matches++;
+  }
+  noHatchlings.hidden = matches > 0;
+}
+
+function drawAddedEgg(): void {
+  drawThumbnail(addedEgg, egg, eggColourway(), FRESH_EGG);
+}
+
+/** The colour that says the most about the egg's current colourway. */
+function accentOf(way: Colourway): string {
   const colours = way.colours as Record<string, string>;
-  return colours.body ?? colours.shell ?? colours.bell ?? Object.values(colours)[2];
+  return colours.body ?? Object.values(colours)[2];
 }
 
-function applyAccent(way: Colourway): void {
-  const hex = swatchOf(way);
+function refreshPreview(): void {
+  const hex = accentOf(colourwayFor(state.previewCritter));
   const [r, g, b] = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
-  // Keep the button's label readable on whatever colour it takes on.
   const light = 0.299 * r + 0.587 * g + 0.114 * b > 150;
   document.documentElement.style.setProperty("--accent", hex);
   document.documentElement.style.setProperty("--on-accent", light ? "#1a1208" : "#ffffff");
+  player.load();
+  drawAddedEgg();
+  drawPossibleHatchlings();
 }
 
-function renderEgg(): void {
-  eggToggle.checked = state.surprise || state.egg;
-  eggToggle.disabled = state.surprise;
-  eggNote.textContent =
-    `It hatches into your critter after ${HATCH_AFTER} contributions since you add it, and cracks as you get closer.` +
-    (state.surprise ? " Surprise me always starts from an egg." : "");
+function profileReadmeUrl(login: string): string {
+  return `https://github.com/${login}/${login}#readme`;
 }
 
-/** Show everything that depends on which critter is picked, or on whether the egg is on. */
-function renderPick(restart: boolean): void {
-  const { critter } = shown();
-  blurb.textContent = state.surprise ? SURPRISE_BLURB : state.critter.blurb;
-  traitFieldset.hidden = state.surprise;
-  buildColourList();
-  renderColourNote();
-  renderEgg();
-  buildTraitList();
-  applyAccent(wayFor(critter));
-  player.load(restart);
-  renderAction();
-}
-
-function choose(critter: Critter): void {
-  state.critter = critter;
-  state.surprise = false;
-  state.eggView = null;
-  renderPick(true);
-}
-
-function chooseSurprise(): void {
-  state.surprise = true;
-  state.eggView = null;
-  renderPick(true);
-}
-
-/** Pick a fixed colourway, or null for the visitor's languages. */
-function chooseColour(fixed: Colourway | null): void {
-  state.useLanguages = fixed === null;
-  if (fixed) chosenWays.set(state.critter.id, fixed);
-  applyAccent(wayFor(shown().critter));
-  player.load(false);
-  drawThumbnails();
-  renderColourNote();
-  renderAction();
-}
-
-/** The colour that goes in the workflow: "languages", or a fixed colourway's id. */
-function colourId(): string {
-  return usingLanguages() ? LANGUAGES_COLOURWAY : chosenWays.get(state.critter.id)!.id;
-}
-
-/** The value that goes in the workflow's critter line. A surprise never says what it is. */
-function critterId(): string {
-  return state.surprise ? "surprise" : state.critter.id;
-}
-
-function eggOn(): boolean {
-  return state.surprise || state.egg;
-}
-
-function setAdd(label: string, href: string | null): void {
+function setAdd(label: string, href: string | null, installs = false): void {
   addButton.textContent = label;
   if (href) addButton.href = href;
   else addButton.removeAttribute("href");
   addButton.classList.toggle("waiting", !href);
+  if (installs) addButton.dataset.installs = "true";
+  else delete addButton.dataset.installs;
 }
 
-/** Update the button and the status line to match the critter and whoever's looking. */
 function renderAction(): void {
   const { profile } = state;
-  const colour = colourId();
-  const critter = critterId();
-  swapHelp.hidden = true;
   if (!profile) {
-    setAdd("Add to my profile", null);
+    setAdd("Add to my GitHub", null);
     statusLine.textContent = usernameInput.value.trim()
       ? "That doesn't look like a GitHub username."
-      : "Enter your username to preview this on your own profile.";
+      : "Enter your username to preview the egg on your own profile.";
     return;
   }
   switch (profile.kind) {
     case "missing":
-      setAdd("Add to my profile", null);
+      setAdd("Add to my GitHub", null);
       statusLine.textContent = `There's no GitHub account called ${usernameInput.value.trim()}.`;
       break;
     case "organization":
-      setAdd("Add to my profile", null);
+      setAdd("Add to my GitHub", null);
       statusLine.textContent = `${profile.login} is an organization. This only works for personal accounts for now.`;
       break;
     case "no-repo":
@@ -473,12 +266,10 @@ function renderAction(): void {
       break;
     case "ready":
       if (profile.installed) {
-        setAdd("Swap to this critter", editLink(profile.login, profile.branch));
-        statusLine.textContent = "You already have a critter, so swapping it takes one small edit.";
-        swapLines.textContent = `activity: true\n${eggOn() ? "egg: true\n" : ""}critter: ${critter}\ncolour: ${colour}`;
-        swapHelp.hidden = false;
+        setAdd("View my README", profileReadmeUrl(profile.login));
+        statusLine.textContent = "Your git-critter is already set up and growing with your activity.";
       } else {
-        setAdd("Add to my profile", addLink(profile.login, profile.branch, critter, colour, eggOn()));
+        setAdd("Add to my GitHub", addLink(profile.login, profile.branch), true);
         statusLine.textContent = !profile.readmeHtml
           ? "You don't have a README yet, so this will start one."
           : hasOtherCreature(profile.readmeHtml)
@@ -487,7 +278,7 @@ function renderAction(): void {
       }
       break;
     case "unknown":
-      setAdd("Add to my profile", addLink(profile.login, "main", critter, colour, eggOn()));
+      setAdd("Add to my GitHub", addLink(profile.login, "main"), true);
       statusLine.textContent = "GitHub isn't answering lookups from here right now, so this shows sample text. The button still works.";
       break;
   }
@@ -504,17 +295,45 @@ function showReadme(profile: Profile | null): void {
   } else {
     readmeContent.replaceChildren(sampleReadme.content.cloneNode(true));
   }
-  const known = profile && "login" in profile ? profile.login : "your-name";
-  profileName.textContent = known;
+  profileName.textContent = profile && "login" in profile ? profile.login : "your-name";
 }
 
-/** The languages may have changed, which can change the colours everywhere. */
-function refreshColours(): void {
-  buildColourList();
-  renderColourNote();
-  applyAccent(wayFor(shown().critter));
-  player.load(false);
-  drawThumbnails();
+const PENDING_INSTALL = "git-critters:pending-install";
+
+function pendingInstall(): string | null {
+  try {
+    return sessionStorage.getItem(PENDING_INSTALL);
+  } catch {
+    return null;
+  }
+}
+
+function rememberInstall(login: string | null): void {
+  try {
+    if (login) sessionStorage.setItem(PENDING_INSTALL, login);
+    else sessionStorage.removeItem(PENDING_INSTALL);
+  } catch {
+    // The focus check still refreshes the page when storage is unavailable.
+  }
+}
+
+function showAdded(login: string): void {
+  viewReadme.href = profileReadmeUrl(login);
+  drawAddedEgg();
+  if (!addedDialog.open) addedDialog.showModal();
+}
+
+function confirmCompletedInstall(profile: Profile): void {
+  const pending = pendingInstall();
+  if (
+    pending &&
+    profile.kind === "ready" &&
+    profile.installed &&
+    pending.toLocaleLowerCase() === profile.login.toLocaleLowerCase()
+  ) {
+    rememberInstall(null);
+    showAdded(profile.login);
+  }
 }
 
 let lookupNumber = 0;
@@ -525,19 +344,20 @@ async function refreshProfile(): Promise<void> {
   if (!isValidUsername(name)) {
     state.profile = null;
     state.languages = [];
-    refreshColours();
+    refreshPreview();
     showReadme(null);
     renderAction();
     return;
   }
   statusLine.textContent = `Looking up ${name}…`;
   const profile = await lookUpProfile(name);
-  if (number !== lookupNumber) return; // they've typed more since
+  if (number !== lookupNumber) return;
   state.profile = profile;
   state.languages = "languages" in profile ? profile.languages : [];
-  refreshColours();
+  refreshPreview();
   showReadme(profile);
   renderAction();
+  confirmCompletedInstall(profile);
 }
 
 let typingTimer = 0;
@@ -552,7 +372,6 @@ usernameInput.addEventListener("keydown", (event) => {
   }
 });
 
-// Coming back from GitHub, they may have just created the repo or added the critter.
 window.addEventListener("focus", () => {
   if (state.profile) void refreshProfile();
 });
@@ -561,24 +380,36 @@ addButton.addEventListener("click", (event) => {
   if (!addButton.hasAttribute("href")) {
     event.preventDefault();
     usernameInput.focus();
+    return;
+  }
+  if (addButton.dataset.installs === "true" && state.profile && "login" in state.profile) {
+    rememberInstall(state.profile.login);
+    statusLine.textContent = "Commit the file on GitHub, then return here for confirmation.";
   }
 });
 
-copySwap.addEventListener("click", async () => {
-  await navigator.clipboard.writeText(swapLines.textContent ?? "");
-  copySwap.textContent = "Copied";
-  setTimeout(() => (copySwap.textContent = "Copy"), 1500);
+function closeDialog(): void {
+  addedDialog.close();
+}
+
+closeAdded.addEventListener("click", closeDialog);
+doneAdded.addEventListener("click", closeDialog);
+addedDialog.addEventListener("click", (event) => {
+  if (event.target === addedDialog) closeDialog();
 });
 
-downloadButton.addEventListener("click", () => {
-  const { critter, traits } = shown();
-  const way = wayFor(critter);
-  const blob = new Blob([encodeGif(critter, way, traits) as Uint8Array<ArrayBuffer>], { type: "image/gif" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `${critter.id}-${way.id}.gif`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+hatchlingSearch.addEventListener("input", filterHatchlings);
+hatchlingSearch.addEventListener("search", filterHatchlings);
+hatchlingSearch.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    hatchlingSearch.value = "";
+    filterHatchlings();
+    hatchlingSearch.blur();
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const firstVisible = hatchlingCards.find(({ button }) => !button.hidden);
+    if (firstVisible) choosePreview(firstVisible.critter);
+  }
 });
 
 document.querySelectorAll<HTMLInputElement>('input[name="theme"]').forEach((radio) => {
@@ -600,34 +431,12 @@ pauseButton.addEventListener("click", () => {
 });
 
 element("hatch-after").textContent = String(HATCH_AFTER);
-eggToggle.addEventListener("change", () => {
-  state.egg = eggToggle.checked;
-  if (!state.egg) state.eggView = null;
-  renderPick(false);
-});
-
-critterSearch.addEventListener("input", filterCritters);
-critterSearch.addEventListener("search", filterCritters);
-critterSearch.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    critterSearch.value = "";
-    filterCritters();
-    critterSearch.blur();
-  } else if (event.key === "Enter") {
-    event.preventDefault();
-    const firstVisible = critterTiles.find((tile) => !tile.label.hidden);
-    if (firstVisible) {
-      if (firstVisible.isSurprise) chooseSurprise();
-      else choose(firstVisible.critter);
-      firstVisible.radio.checked = true;
-    }
-  }
-});
-
-buildCritterList();
+buildPossibleHatchlings();
+filterHatchlings();
 renderPause();
+refreshPreview();
 showReadme(null);
-choose(state.critter);
+renderAction();
 requestAnimationFrame((time) => {
   player.last = time;
   player.tick(time);

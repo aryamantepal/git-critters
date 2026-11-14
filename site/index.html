@@ -8,7 +8,7 @@
       content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'"
     />
     <title>git-critters</title>
-    <meta name="description" content="Pick a pixel-art critter, see it on your GitHub profile, and add it in one click." />
+    <meta name="description" content="Add a surprise pixel-art critter to your GitHub profile." />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="alternate icon" href="favicon.ico" />
@@ -20,78 +20,56 @@
     <aside class="panel">
       <header>
         <h1>git-critters</h1>
-        <p class="lede">A pixel-art critter for your GitHub profile. Pick one, see how it looks, and add it.</p>
+        <p class="lede">A surprise pixel-art critter for your GitHub profile. Add the egg now and discover your hatchling later.</p>
       </header>
 
-      <fieldset>
-        <legend>Critter</legend>
+      <div class="hatchling-note">
+        <span class="hatchling-note-title">Your hatchling is a surprise</span>
+        <p>Your username always leads to the same critter. The egg cracks as you contribute and reveals it when it hatches.</p>
+      </div>
+
+      <section class="possible-hatchlings" aria-labelledby="possible-hatchlings-title">
+        <h2 id="possible-hatchlings-title">Possible hatchlings · preview only</h2>
         <div class="search-field">
           <input
-            id="critter-search"
+            id="hatchling-search"
             type="search"
-            aria-label="Search critters"
-            aria-controls="critters"
+            aria-label="Search possible hatchlings"
+            aria-controls="possible-hatchlings"
             placeholder="Search critters…"
             autocomplete="off"
             autocapitalize="off"
             spellcheck="false"
           />
         </div>
-        <div id="critters" class="critters"></div>
-        <p id="no-critters" class="note empty-search" aria-live="polite" hidden>No critters match your search.</p>
-        <p id="blurb" class="blurb"></p>
-      </fieldset>
-
-      <fieldset>
-        <legend>Colour</legend>
-        <div id="colours" class="colours"></div>
-        <p id="colour-note" class="note"></p>
-      </fieldset>
-
-      <fieldset>
-        <legend>Egg</legend>
-        <label class="colour plain toggle"><input id="egg" type="checkbox" /><span>Start from an egg</span></label>
-        <p id="egg-note" class="note"></p>
-      </fieldset>
-
-      <details id="try-the-rest" class="try-the-rest">
-        <summary>Try the rest</summary>
-        <div id="traits" class="traits"></div>
-        <p class="note">
-          This is only a preview. The site can't read your contributions, so it never knows which of these you'd get.
-          The real critter is drawn from your activity each night.
-        </p>
-      </details>
+        <div id="possible-hatchlings" class="hatchling-grid"></div>
+        <p id="no-hatchlings" class="empty-search" aria-live="polite" hidden>No critters match your search.</p>
+        <div class="preview-warning" role="note">
+          <strong>Your preview does not choose your critter.</strong>
+          <span>You will still get a random hatchling determined by your username. Select any card only to see its GIF.</span>
+        </div>
+      </section>
 
       <div class="field">
         <label for="username">Your GitHub username</label>
         <input id="username" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="octocat" />
       </div>
 
-      <a id="add" class="add waiting" target="_blank" rel="noopener">Add to my profile</a>
+      <a id="add" class="add waiting" target="_blank" rel="noopener">Add to my GitHub</a>
       <p id="status" class="status" role="status"></p>
-
-      <div id="swap-help" class="swap" hidden>
-        <p>Replace everything under <code>with:</code> in the file with:</p>
-        <pre id="swap-lines"></pre>
-        <button id="copy-swap" type="button" class="quiet">Copy</button>
-      </div>
 
       <details>
         <summary>What happens when I click it?</summary>
         <ol>
           <li>GitHub opens with one small workflow file already filled in.</li>
           <li>You commit it. Choose “Create a new branch” if you'd rather review it as a pull request.</li>
-          <li>Within a minute, the workflow draws your critter, or an egg if you left “Start from an egg” on, and adds it to the top of your README, or in place of a git-koi koi if you have one.</li>
+          <li>Within a minute, the workflow draws your egg and adds a starter block to your README, or replaces a git-koi koi if you have one.</li>
         </ol>
-        <p>An egg starts out uncracked and cracks as you make contributions. After <span id="hatch-after"></span> of them since you added the workflow, it hatches into the critter you picked. With “Surprise me”, the critter is chosen from your username and you only find out which one it is when it hatches. Turn “Start from an egg” off to get the critter straight away.</p>
+        <p>Your egg starts out uncracked and cracks as you make contributions. After <span id="hatch-after"></span> of them since you added the workflow, it reveals the hatchling chosen from your username.</p>
         <p>The workflow also runs every night, just after midnight UTC. It reads your public GitHub activity and redraws the critter, and it commits to your profile repo whenever the critter changes. That adds a few hundred KB to the repo's history each time. If nothing has changed for a while, it adds an empty commit now and then, so GitHub doesn't switch the nightly run off.</p>
+        <p>After the first run, the marked README block is yours. Move it or edit its supported HTML however you like; nightly runs update only <code>critter.gif</code> and preserve your layout.</p>
         <p>There's nothing to sign in to here, and nothing to install. To remove it, delete the workflow, <code>critter.gif</code> and the block it added to your README.</p>
       </details>
-
-      <p class="more">
-        <button id="download" type="button" class="quiet">Download the GIF instead</button>
-      </p>
 
       <footer>
         <a href="https://github.com/aryamantepal/git-critters">Source</a>
@@ -101,7 +79,7 @@
 
     <main class="stage-area">
       <div class="preview-bar">
-        <span class="preview-title">How it looks on your profile</span>
+        <span class="preview-title">How it could look on your profile</span>
         <div class="preview-controls">
           <button id="pause" type="button" class="quiet"></button>
           <fieldset class="theme" aria-label="GitHub theme">
@@ -124,6 +102,20 @@
         </div>
       </div>
     </main>
+
+    <dialog id="added-dialog" class="added-dialog" aria-labelledby="added-title">
+      <button id="close-added" type="button" class="dialog-close" aria-label="Close">×</button>
+      <div class="added-egg" aria-hidden="true">
+        <canvas id="added-egg" width="168" height="128"></canvas>
+      </div>
+      <p class="dialog-kicker">critter added</p>
+      <h2 id="added-title">Your egg is in its new home.</h2>
+      <p>GitHub is drawing it now. Check your profile README to see the egg and watch it crack as you contribute.</p>
+      <div class="dialog-actions">
+        <a id="view-readme" class="add" target="_blank" rel="noopener">Check out my README</a>
+        <button id="done-added" type="button" class="quiet">Done</button>
+      </div>
+    </dialog>
 
     <template id="sample-readme">
       <h3>Hi, I'm your name</h3>
