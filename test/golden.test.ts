@@ -43,9 +43,9 @@ const HASHES: Record<string, string> = {
   "penguin/tuxedo": "7b623437f8592bd858d779523ea18b65e63ba9fc06223c0090de7ce413cd8981",
   "penguin/ice": "1a1f3ef98974f1ff702f14d915878b58c502e30a98c519f2c20a5614d491caaa",
   "penguin/gentoo": "1c4e224f4f408892b34db95ccf3ae2bbc183a1f7b661e137a6ec7e3e20dc7759",
-  "fox/russet": "b654e2ad841909921a28c01cb8044a587644d062d2e7c4fa7173e4dac8aba79a",
-  "fox/arctic": "18f0914073708388323063501cad0c685083dd263564a93f8b35b8054497980d",
-  "fox/silver": "4cf265c1e052a5239c20fcd799a663005b1a082510a5e025418b5f8fe92d11a7",
+  "fox/russet": "91d2397ab8c84a453494ae6ec50f761027f91b951f7fe9a526d612ad07f8c53e",
+  "fox/arctic": "0cd809cd54cf63e340e5d2171e8b0d34b6f83af7568714f4b43ddfc7f13d0276",
+  "fox/silver": "c3bd7c66789e4e2ed3803ab1ef600961bd2d313dd5a55834e0fe1ab29202dcc0",
 };
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
