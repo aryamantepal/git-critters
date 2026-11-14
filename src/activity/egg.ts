@@ -13,18 +13,40 @@ export function hasHatched(contributions: number): boolean {
   return contributions >= HATCH_AFTER;
 }
 
-/**
- * The critters a surprise can hatch into. This is its own list, not derived from
- * `critters`, and must never be reordered or extended in place: that would change
- * the critter everyone with a surprise has already been promised.
- */
-export const SURPRISE_POOL: readonly string[] = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
+/** The full pool used by the site's new automatic hatchling flow. */
+export const HATCHLING_POOL: readonly string[] = Object.freeze([
+  "dragon",
+  "axolotl",
+  "jellyfish",
+  "ghost",
+  "robot",
+  "cat",
+  "frog",
+  "mushroom",
+  "turtle",
+  "bat",
+]);
 
-/** FNV-1a over the login in lower case, so `Sam` and `sam` get the same surprise. */
-export function surpriseFor(login: string): string {
+/**
+ * The original `critter: surprise` pool. Never change this list: existing workflows
+ * still use it, and changing it would silently replace their promised hatchling.
+ */
+export const LEGACY_SURPRISE_POOL: readonly string[] = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
+
+function hashLogin(login: string): number {
   let hash = 0x811c9dc5;
   for (const byte of new TextEncoder().encode(login.toLowerCase())) {
     hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
   }
-  return SURPRISE_POOL[hash % SURPRISE_POOL.length];
+  return hash;
+}
+
+/** FNV-1a over the login in lower case, so `Sam` and `sam` get the same hatchling. */
+export function hatchlingFor(login: string): string {
+  return HATCHLING_POOL[hashLogin(login) % HATCHLING_POOL.length];
+}
+
+/** Preserve the mapping used by workflows that explicitly say `critter: surprise`. */
+export function legacySurpriseFor(login: string): string {
+  return LEGACY_SURPRISE_POOL[hashLogin(login) % LEGACY_SURPRISE_POOL.length];
 }

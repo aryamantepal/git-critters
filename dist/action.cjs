@@ -159,13 +159,31 @@ function crackLevelFor(contributions) {
 function hasHatched(contributions) {
   return contributions >= HATCH_AFTER;
 }
-var SURPRISE_POOL = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
-function surpriseFor(login) {
+var HATCHLING_POOL = Object.freeze([
+  "dragon",
+  "axolotl",
+  "jellyfish",
+  "ghost",
+  "robot",
+  "cat",
+  "frog",
+  "mushroom",
+  "turtle",
+  "bat"
+]);
+var LEGACY_SURPRISE_POOL = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
+function hashLogin(login) {
   let hash = 2166136261;
   for (const byte of new TextEncoder().encode(login.toLowerCase())) {
     hash = Math.imul(hash ^ byte, 16777619) >>> 0;
   }
-  return SURPRISE_POOL[hash % SURPRISE_POOL.length];
+  return hash;
+}
+function hatchlingFor(login) {
+  return HATCHLING_POOL[hashLogin(login) % HATCHLING_POOL.length];
+}
+function legacySurpriseFor(login) {
+  return LEGACY_SURPRISE_POOL[hashLogin(login) % LEGACY_SURPRISE_POOL.length];
 }
 
 // src/activity/traits.ts
@@ -5373,16 +5391,19 @@ async function lookUp(login, now, forEgg) {
   }
 }
 async function main() {
-  const surprise = input("critter") === SURPRISE;
-  const picked = surprise ? void 0 : findCritter(input("critter"));
-  if (!surprise && !picked) {
+  const critterInput = input("critter");
+  const automatic = critterInput === "";
+  const legacySurprise = critterInput === SURPRISE;
+  const usernameChosen = automatic || legacySurprise;
+  const picked = usernameChosen ? void 0 : findCritter(critterInput);
+  if (!usernameChosen && !picked) {
     fail(`Unknown critter "${input("critter")}". Choose from: ${[...critters.map((c) => c.id), SURPRISE].join(", ")}.`);
   }
   const activity = flag("activity");
-  const eggOn = flag("egg") || surprise;
+  const eggOn = flag("egg") || usernameChosen;
   if (eggOn && !activity) {
     fail(
-      `${surprise ? `critter: ${SURPRISE}` : "egg: true"} needs activity: true, since the egg hatches from your contributions.`
+      `${usernameChosen ? "An automatic hatchling" : "egg: true"} needs activity: true, since the egg hatches from your contributions.`
     );
   }
   const colour = input("colour");
@@ -5390,9 +5411,9 @@ async function main() {
     fail(`colour: ${LANGUAGES_COLOURWAY} draws from your languages, so it needs activity: true.`);
   }
   const fixed = colour !== "" && colour !== LANGUAGES_COLOURWAY;
-  if (fixed && surprise) {
+  if (fixed && usernameChosen) {
     fail(
-      `critter: ${SURPRISE} can't use the fixed colour "${colour}", since each colour belongs to one critter. Use colour: ${LANGUAGES_COLOURWAY}, or leave colour out.`
+      `An automatic hatchling can't use the fixed colour "${colour}", since each colour belongs to one critter. Use colour: ${LANGUAGES_COLOURWAY}, or leave colour out.`
     );
   }
   if (fixed && picked && !picked.colourways.some((way) => way.id === colour)) {
@@ -5442,7 +5463,7 @@ async function main() {
         plan = { critter: egg, colourway: egg.colourways[0].id, traits: FRESH_EGG, message, added: "Added the egg" };
       }
     } else {
-      const critter = picked ?? findCritter(surpriseFor(login));
+      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login));
       let colourway = fixed ? colour : critter.colourways[0].id;
       let traits = DEFAULT_TRAITS;
       if (reading) {

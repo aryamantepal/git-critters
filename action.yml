@@ -7,10 +7,12 @@ branding:
 inputs:
   critter:
     description: >-
-      Which critter to draw. One of dragon, axolotl, jellyfish, ghost, robot, cat, frog, mushroom, turtle or bat, or "surprise" to start
-      from an egg that hatches into a critter chosen from your username (needs activity, and
-      colour languages or none).
-    required: true
+      Optional legacy override for the critter to draw. Leave it out to start from an egg that
+      hatches into the critter chosen from the login. Existing named values and "surprise"
+      remain supported for backwards compatibility: dragon, axolotl, jellyfish, ghost, robot,
+      cat, frog, mushroom, turtle and bat.
+    required: false
+    default: ""
   colour:
     description: >-
       Which colourway to use, or "languages" to colour it from your most-used languages

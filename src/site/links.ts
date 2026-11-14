@@ -9,10 +9,10 @@ export function isValidUsername(name: string): boolean {
   return USERNAME.test(name);
 }
 
-/** The one small file someone commits to get a critter. */
-export function workflowFile(critter: string, colour: string, egg: boolean): string {
+/** The one small file someone commits to get their username-derived hatchling. */
+export function workflowFile(): string {
   return `# Draws a pixel-art critter from your GitHub activity and adds it to the top of this README.
-# To swap it, change the last two lines and commit: ${SITE_URL}
+# Your username determines which critter is inside the egg: ${SITE_URL}
 name: Critter
 
 on:
@@ -35,17 +35,15 @@ jobs:
       - uses: ${ACTION}
         with:
           activity: true
-${egg ? "          egg: true\n" : ""}          critter: ${critter}
-          colour: ${colour}
 `;
 }
 
 /** GitHub's new-file page with the workflow already filled in, ready to commit. */
-export function addLink(login: string, branch: string, critter: string, colour: string, egg: boolean): string {
+export function addLink(login: string, branch: string): string {
   const query = new URLSearchParams({
     filename: WORKFLOW_PATH,
-    value: workflowFile(critter, colour, egg),
-    message: `Add a ${critter} to my profile`,
+    value: workflowFile(),
+    message: "Add a git-critter to my profile",
   });
   return `https://github.com/${login}/${login}/new/${encodeURIComponent(branch)}?${query}`;
 }

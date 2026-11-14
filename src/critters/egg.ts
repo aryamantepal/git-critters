@@ -1,4 +1,4 @@
-// The egg a critter starts as. It isn't listed in `critters`, since nobody picks it as a species.
+// The egg a critter starts as. It isn't listed in `critters`, since it isn't a species.
 // Its traits mean something different: `stage` is the crack level, 0 uncracked, 1 a first crack,
 // 2 more cracks, 3 big cracks with light showing through. `marks` is ignored, and `mood` sets how
 // lively the rocking is, with a little hop when lively.
