@@ -55,6 +55,8 @@ jobs:
           grep -q 'src="critter.gif"' README.md
           grep -q 'My existing text.' README.md
           git rev-parse HEAD > before
+          git hash-object README.md > readme-before
+          git hash-object critter.gif > gif-before
 
       - uses: ./
         with:
@@ -66,11 +68,12 @@ jobs:
       - uses: ./
         with:
           critter: dragon
-      - name: Swapping replaces the critter in place, using its first colourway
+      - name: Swapping redraws the GIF but preserves the user-owned README block
         run: |
           git log -1 --format=%s | grep -qx "critter: draw the ember dragon"
+          test "$(git hash-object critter.gif)" != "$(cat gif-before)"
+          test "$(git hash-object README.md)" = "$(cat readme-before)"
           test "$(grep -c 'git-critters:start' README.md)" = 1
-          grep -q 'of a dragon' README.md
 
       - uses: ./
         with:
@@ -82,8 +85,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BRANCH")"
           git log -1 --format=%s | grep -Eqx "critter: draw the ghost for [0-9]{4}-[0-9]{2}-[0-9]{2}"
           head -c 6 critter.gif | grep -q GIF89a
+          test "$(git hash-object README.md)" = "$(cat readme-before)"
           test "$(grep -c 'git-critters:start' README.md)" = 1
-          grep -q 'of a friendly ghost' README.md
           grep -q 'My existing text.' README.md
           git rev-parse HEAD > before-activity
 
@@ -99,15 +102,14 @@ jobs:
         with:
           critter: surprise
           activity: true
-      - name: A surprise hatches into a critter, not the egg, and replaces the one README block
+      - name: A surprise hatches into a critter without rewriting the README block
         run: |
           git fetch --quiet origin "$BRANCH"
           test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BRANCH")"
           git log -1 --format=%s | grep -Eqx "critter: draw the (dragon|axolotl|jellyfish|ghost) for [0-9]{4}-[0-9]{2}-[0-9]{2}"
           head -c 6 critter.gif | grep -q GIF89a
+          test "$(git hash-object README.md)" = "$(cat readme-before)"
           test "$(grep -c 'git-critters:start' README.md)" = 1
-          grep -q 'alt="Animated pixel art of' README.md
-          ! grep -q 'speckled egg' README.md
           grep -q 'My existing text.' README.md
 
       # An organization has no activity to read, so this is the failed read: no GIF at this path yet means an egg.
@@ -118,15 +120,15 @@ jobs:
           activity: true
           login: github
           output: egg/critter.gif
-      - name: When the read fails and there's no GIF, an uncracked egg is drawn and committed
+      - name: A new egg path is drawn without rewriting the user-owned README block
         run: |
           git fetch --quiet origin "$BRANCH"
           test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BRANCH")"
           git log -1 --format=%s | grep -Eqx "critter: draw the egg for [0-9]{4}-[0-9]{2}-[0-9]{2}"
           head -c 6 egg/critter.gif | grep -q GIF89a
+          test "$(git hash-object README.md)" = "$(cat readme-before)"
           test "$(grep -c 'git-critters:start' README.md)" = 1
-          grep -q 'src="egg/critter.gif"' README.md
-          grep -q 'alt="Animated pixel art of a speckled egg' README.md
+          grep -q 'src="critter.gif"' README.md
 
       - name: egg without activity fails with a clear message
         id: egg-off
