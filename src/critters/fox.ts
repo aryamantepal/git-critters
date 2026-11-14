@@ -26,7 +26,8 @@ const TILT = 0.3;
 // How far its legs swing, how far its tail sways, and how hard it wags, by mood.
 const STRIDE: Readonly<Record<Mood, number>> = { resting: 0.5, steady: 1, lively: 1.2 };
 const SWAY: Readonly<Record<Mood, number>> = { resting: 0.3, steady: 0.1, lively: 0.06 };
-// How far the tail swings against the legs: a resting fox barely steps, so its tail does the moving.
+// How far the tail swings against the legs, at full size: a resting fox barely steps, so its tail does the moving.
+// Smaller, it swings wider, so its tip still travels as many pixels and something moves every frame.
 const BALANCE: Readonly<Record<Mood, number>> = { resting: 0.2, steady: 0.14, lively: 0.17 };
 const WAG: Readonly<Record<Mood, number>> = { resting: 0, steady: 0, lively: 0.14 };
 
@@ -40,55 +41,52 @@ const WAYPOINTS: readonly Point[] = [
   [52, 100],
 ];
 
-// Measurements at full size, as [forward, up] from under its middle, with up negative.
-const TORSO: readonly [number, number, number, number] = [-1, -15, 13, 6]; // centre, radii
-const CHEST: readonly [number, number, number] = [9, -16, 6];
-const NECK: Point = [11, -20];
-const NECK_R = 4.5;
-const HEAD: readonly [number, number, number] = [14, -25, 6];
-const SNOUT_FROM = 14;
-const SNOUT_TO = 25.5;
-const SNOUT_Y = -23;
-const SNOUT_HALF = 3.6;
-const EARS: readonly (readonly [Point, Point, Point])[] = [
-  [
-    [8.5, -28],
-    [10, -36.5],
-    [13, -29],
-  ],
-  [
-    [12, -29],
-    [15.5, -38],
-    [18, -29.5],
-  ],
+// It's built from boxes, at full size in pixels, as [u0, v0, u1, v1]: forward, then up from
+// under its middle, with up negative. Parts that turn have boxes in their own frame.
+type Box = readonly [number, number, number, number];
+const TORSO: Box = [-12, -18, 9, -9];
+const SHOULDERS: Box = [5, -22, 12, -9];
+const CHEST: Box = [7, -16, 12, -9];
+// The head and everything on it turn together about the neck when it tilts.
+const NECK: Point = [10, -21];
+const HEAD: Box = [8, -30, 19, -19];
+const SNOUT: Box = [19, -25, 25, -19];
+const JAW: Box = [14, -22, 25, -19];
+const EARS: readonly Box[] = [
+  [9, -35, 12, -30],
+  [14, -35, 17, -30],
 ];
-const EAR_TIP = -34; // above this, the ears are dark
-const EYE: Point = [16.5, -26.5];
-const NOSE: Point = [22.5, -22]; // well inside the snout, so it lands on it at any size; drawn at the snout's tip
-const LEG_LENGTH = 11;
-const LEG_R = 1.5;
-const SOCK_FROM = 0.55; // how far down a leg its sock starts
+const EAR_TIP = -33; // above this, the ears are dark
+// The eye and nose are stamped as whole pixels where these points land, so they keep their size as it moves.
+const EYE: Point = [16.5, -26.5]; // the eye's front top pixel
+const NOSE: Point = [22.5, -23.5]; // well inside the snout, so it lands on it at any size; drawn at the snout's tip
+const NOSE_SIZE: readonly Point[] = [[2, 1], [2, 1], [2, 2], [2, 2]]; // across by down, by stage
+// A leg hangs from its hip, in its own frame: across, then down.
+const LEG: Box = [-1.5, 0, 1.5, 10];
+const SOCK_FROM = 6; // how far down a leg its sock starts
 // Hips, as [forward, up, phase]: diagonal pairs move together, as in a trot.
 const NEAR_LEGS: readonly (readonly [number, number, number])[] = [
-  [8, -11, 0],
-  [-9, -11, Math.PI],
+  [8, -10, 0],
+  [-8, -10, Math.PI],
 ];
 const FAR_LEGS: readonly (readonly [number, number, number])[] = [
-  [6, -11, Math.PI],
-  [-11, -11, 0],
+  [5, -10, Math.PI],
+  [-11, -10, 0],
 ];
-const TAIL_BASE: Point = [-13, -17];
-const TAIL_LENGTH = 21;
-const TAIL_SAMPLES = 16;
-const TAIL_TIP = 0.8; // past here, the tail is white
+// The tail points back from its base, in its own frame: along (back is negative), then across.
+// Its brush bends at a joint partway along, and is measured from there.
+const TAIL_BASE: Point = [-12, -15];
+const TAIL_ROOT: Box = [-8, -2.5, 0, 2.5];
+const BRUSH_JOINT: Point = [-7, 0];
+const TAIL_BRUSH: Box = [-18, -4.5, 0, 4.5];
+const TAIL_TIP = -13; // past here, the brush is white
 
-// Marks: a blaze on the forehead, then dark bands round the tail, as fractions along it.
-const BLAZE: readonly [Point, Point] = [
-  [13.5, -30],
-  [16, -27],
-];
-const BANDS: readonly (readonly number[])[] = [[], [], [0.6], [0.6, 0.38]];
-const BAND_HALF = 0.8; // half a band's width, in sprite pixels, so it shows at every size
+// Marks: a pale blaze along the top of its head, then dark bands round the brush, along it in its own frame.
+// The blaze sits under the lit top edge of its head, so it never blends into the highlight.
+const BLAZE: readonly [number, number] = [12.5, 19]; // where it starts and ends along its head
+const BLAZE_DEPTH = 2.2; // how far down from the top of its head the blaze reaches, in sprite pixels
+const BANDS: readonly (readonly number[])[] = [[], [], [-10.5], [-10.5, -4.5]];
+const BAND_HALF = 0.9; // half a band's width, in sprite pixels, so it shows at every size
 
 const COLOUR_NAMES = [
   "rim",
@@ -125,6 +123,8 @@ interface Pose {
   tilt: number;
   /** The tail's angle above level, pointing back. */
   tail: number;
+  /** How far its brush bends up from the rest of its tail. */
+  flick: number;
   blink: boolean;
 }
 
@@ -173,7 +173,8 @@ function facingOf(vx: Float64Array): (1 | -1)[] {
   return out;
 }
 
-function buildPoses({ mood }: Traits): Pose[] {
+function buildPoses({ mood, stage }: Traits): Pose[] {
+  const swing = BALANCE[mood] / STAGE_SCALE[stage];
   const events = Float64Array.from({ length: FRAMES }, (_, i) => eventAt(mood, i));
   // A steady fox stops to tilt its head; a pouncing one keeps going.
   const hold = mood === "steady" ? events : new Float64Array(FRAMES);
@@ -194,12 +195,14 @@ function buildPoses({ mood }: Traits): Pose[] {
     const tilting = mood === "steady" ? event : 0;
     const stride = STRIDE[mood] * (1 - tilting);
     // The tail swings a quarter stride behind the legs, to balance, and sways slowly on top.
-    const balance = BALANCE[mood] * Math.cos(step[i]) * (1 - tilting);
+    const balance = swing * Math.cos(step[i]) * (1 - tilting);
     const sway = SWAY[mood] * Math.sin((TAU * sways * i) / FRAMES);
     const wag = WAG[mood] * Math.sin((TAU * wags * i) / FRAMES);
     // While its head is tilted, its tail swishes, a quarter turn behind the wobble of its head.
     const swish = 0.22 * tilting * Math.cos(TAU * 2 * t);
     const tail = (0.3 + balance + sway + wag + swish) * (1 - pouncing) + 0.08 * pouncing;
+    // Its brush swings a quarter stride after that, so while the tail turns back, the brush is still moving.
+    const flick = swing * Math.sin(step[i]) * (1 - tilting) * (1 - pouncing);
     return {
       x: x[i],
       y: y[i],
@@ -212,6 +215,7 @@ function buildPoses({ mood }: Traits): Pose[] {
       reach: pouncing,
       tilt: tilting * (TILT + 0.12 * Math.sin(TAU * 2 * t)),
       tail,
+      flick,
       blink: blinks.has(i),
     };
   });
@@ -253,114 +257,85 @@ function toSprite(at: Placement, u: number, v: number): Point {
   return [at.px + su * at.cos - sv * at.sin, at.py + su * at.sin + sv * at.cos];
 }
 
-/** A point in the head's own coordinates, as if it weren't tilted. */
-function untilt(u: number, v: number, tilt: number): Point {
-  const c = Math.cos(tilt);
-  const s = Math.sin(tilt);
-  const du = u - NECK[0];
-  const dv = v - NECK[1];
-  return [NECK[0] + du * c + dv * s, NECK[1] - du * s + dv * c];
+/** A part that turns about `pivot`, in its parent's frame if it has one. A positive angle raises a part that points back. */
+interface Joint {
+  pivot: Point;
+  angle: number;
+  parent?: Joint;
 }
 
-/** A point on the untilted head, where it is once tilted. */
-function tilted([u, v]: Point, tilt: number): Point {
-  return untilt(u, v, -tilt);
+const FIXED: Joint = { pivot: [0, 0], angle: 0 };
+
+/** A point in full-size coordinates, in the part's own frame. */
+function intoJoint({ pivot, angle, parent }: Joint, u: number, v: number): Point {
+  const [pu, pv] = parent ? intoJoint(parent, u, v) : [u, v];
+  const du = pu - pivot[0];
+  const dv = pv - pivot[1];
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [du * c + dv * s, -du * s + dv * c];
 }
 
-/** The pixels whose full-size coordinates are `inside`, looking only at those in `within` if given. */
-function shapeMask(canvas: Canvas, at: Placement, inside: (u: number, v: number) => boolean, within?: Mask): Mask {
+/** A point in the part's own frame, in full-size coordinates. */
+function outOfJoint({ pivot, angle, parent }: Joint, lu: number, lv: number): Point {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const u = pivot[0] + lu * c - lv * s;
+  const v = pivot[1] + lu * s + lv * c;
+  return parent ? outOfJoint(parent, u, v) : [u, v];
+}
+
+/** The pixels of one box. Only the pixels round its corners are tested, which keeps drawing quick. */
+function boxMask(canvas: Canvas, at: Placement, joint: Joint, [u0, v0, u1, v1]: Box): Mask {
   const mask = canvas.mask();
-  for (let y = 0; y < canvas.height; y++) {
-    for (let x = 0; x < canvas.width; x++) {
-      if (within && !within.bits[y * canvas.width + x]) continue;
-      const [u, v] = toBody(at, x, y);
-      if (inside(u, v)) mask.addPixel(x, y);
+  const corners = [
+    [u0, v0],
+    [u1, v0],
+    [u0, v1],
+    [u1, v1],
+  ].map(([u, v]) => toSprite(at, ...outOfJoint(joint, u, v)));
+  const left = Math.max(0, Math.floor(Math.min(...corners.map((c) => c[0]))) - 1);
+  const right = Math.min(canvas.width - 1, Math.ceil(Math.max(...corners.map((c) => c[0]))) + 1);
+  const top = Math.max(0, Math.floor(Math.min(...corners.map((c) => c[1]))) - 1);
+  const bottom = Math.min(canvas.height - 1, Math.ceil(Math.max(...corners.map((c) => c[1]))) + 1);
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) {
+      const [lu, lv] = intoJoint(joint, ...toBody(at, x, y));
+      if (lu >= u0 && lu <= u1 && lv >= v0 && lv <= v1) mask.addPixel(x, y);
     }
   }
   return mask;
 }
 
-function inDisc(u: number, v: number, [cx, cy, r]: readonly [number, number, number]): boolean {
-  return (u - cx) ** 2 + (v - cy) ** 2 <= r * r;
+function boxesMask(canvas: Canvas, at: Placement, joint: Joint, boxes: readonly Box[]): Mask {
+  const mask = canvas.mask();
+  for (const box of boxes) mask.add(boxMask(canvas, at, joint, box));
+  return mask;
 }
 
-function inTriangle(u: number, v: number, [a, b, c]: readonly [Point, Point, Point]): boolean {
-  const side = (p: Point, q: Point) => (q[0] - p[0]) * (v - p[1]) - (q[1] - p[1]) * (u - p[0]);
-  const d1 = side(a, b);
-  const d2 = side(b, c);
-  const d3 = side(c, a);
-  return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+/** A head box, measured from the neck it turns about rather than from under the fox's middle. */
+function onHead([u0, v0, u1, v1]: Box): Box {
+  return [u0 - NECK[0], v0 - NECK[1], u1 - NECK[0], v1 - NECK[1]];
 }
 
-function inSnout(u: number, v: number): boolean {
-  const s = (u - SNOUT_FROM) / (SNOUT_TO - SNOUT_FROM);
-  if (s < 0 || s > 1) return false;
-  return Math.abs(v - (SNOUT_Y + 1.2 * s)) <= SNOUT_HALF * (1 - s) + 0.6;
+/** Flat shading, like a lit block: a bright top edge and a darker underside. Returns the lit edge. */
+function shade(canvas: Canvas, mask: Mask, fill: number, high: number, low: number): Mask {
+  const lit = mask.minus(mask.moved(0, 1));
+  canvas.fill(mask, fill);
+  canvas.fill(mask.minus(mask.moved(0, -2)), low);
+  canvas.fill(lit, high);
+  return lit;
 }
 
-function inHead(u: number, v: number): boolean {
-  return inDisc(u, v, HEAD) || inSnout(u, v) || EARS.some((ear) => inTriangle(u, v, ear));
-}
-
-function inTorso(u: number, v: number): boolean {
-  const [cx, cy, rx, ry] = TORSO;
-  return (
-    ((u - cx) / rx) ** 2 + ((v - cy) / ry) ** 2 <= 1 ||
-    inDisc(u, v, CHEST) ||
-    inDisc(u, v, [NECK[0], NECK[1], NECK_R])
-  );
-}
-
-/** Points along the tail, with their radius, from its base to its tip. */
-function tailSpine(angle: number): { u: number; v: number; r: number; t: number }[] {
-  const points = [];
-  let [u, v] = TAIL_BASE;
-  const piece = TAIL_LENGTH / TAIL_SAMPLES;
-  for (let j = 0; j <= TAIL_SAMPLES; j++) {
-    const t = j / TAIL_SAMPLES;
-    // Bushy in the middle, round at the tip, and drooping a little towards it.
-    const r = 2.2 + 4.3 * Math.sin(Math.PI * Math.min(1, t * 1.15)) ** 0.8;
-    points.push({ u, v, r, t });
-    const a = angle - 0.6 * t;
-    u -= piece * Math.cos(a);
-    v -= piece * Math.sin(a);
-  }
-  return points;
-}
-
-type Spine = ReturnType<typeof tailSpine>;
-
-function inTail(spine: Spine): (u: number, v: number) => boolean {
-  return (u, v) => spine.some((p) => (u - p.u) ** 2 + (v - p.v) ** 2 <= p.r * p.r);
-}
-
-/** How far along the tail a point is, 0 at its base to 1 at its tip, where it's nearest the spine. */
-function alongTail(spine: Spine, u: number, v: number): number {
-  let best = 0;
-  let bestDistance = Infinity;
-  for (let j = 1; j < spine.length; j++) {
-    const a = spine[j - 1];
-    const b = spine[j];
-    const du = b.u - a.u;
-    const dv = b.v - a.v;
-    const s = clamp(((u - a.u) * du + (v - a.v) * dv) / (du * du + dv * dv), 0, 1);
-    const distance = (u - a.u - s * du) ** 2 + (v - a.v - s * dv) ** 2;
-    if (distance < bestDistance) {
-      best = a.t + s * (b.t - a.t);
-      bestDistance = distance;
-    }
-  }
-  return best;
-}
-
-/** Where a leg's paw lands: straight down from the hip, swung by the trot or stretched for a pounce. */
-function pawOf(pose: Pose, [hx, hy, phase]: readonly [number, number, number]): Point {
+/** A leg's joint at its hip, and how far its paw is lifted: swung by the trot, or stretched for a pounce. */
+function legOf(pose: Pose, [hx, hy, phase]: readonly [number, number, number]): { joint: Joint; lift: number } {
   const front = hx > 0;
   const trot = 0.45 * pose.stride * Math.sin(pose.step + phase);
   const leap = front ? 0.9 : -0.8;
-  const angle = trot * (1 - pose.reach) + leap * pose.reach;
-  const lift = 1.8 * pose.stride * Math.max(0, Math.cos(pose.step + phase)) * (1 - pose.reach);
-  return [hx + LEG_LENGTH * Math.sin(angle), hy + LEG_LENGTH * Math.cos(angle) - lift];
+  const swing = trot * (1 - pose.reach) + leap * pose.reach;
+  const lift = 1.8 * pose.stride * Math.max(0, Math.cos(pose.step + phase)) * (1 - pose.reach) + 2 * pose.reach;
+  // A leg hangs down, so it swings forward when its frame turns the other way.
+  return { joint: { pivot: [hx, hy], angle: -swing }, lift };
 }
 
 function drawLegs(
@@ -371,93 +346,84 @@ function drawLegs(
   fill: number,
 ): void {
   for (const hip of legs) {
-    const [hx, hy] = hip;
-    const [fx, fy] = pawOf(pose, hip);
-    const along = (u: number, v: number) => {
-      const du = fx - hx;
-      const dv = fy - hy;
-      return clamp(((u - hx) * du + (v - hy) * dv) / (du * du + dv * dv), 0, 1);
-    };
-    const near = (u: number, v: number) => {
-      const s = along(u, v);
-      return (u - hx - s * (fx - hx)) ** 2 + (v - hy - s * (fy - hy)) ** 2 <= LEG_R * LEG_R;
-    };
-    const leg = shapeMask(canvas, at, near);
+    const { joint, lift } = legOf(pose, hip);
+    const [u0, v0, u1, v1] = LEG;
+    const leg = boxMask(canvas, at, joint, [u0, v0, u1, v1 - lift]);
     canvas.sticker(leg, fill, C.line);
-    canvas.fill(shapeMask(canvas, at, (u, v) => along(u, v) >= SOCK_FROM, leg), C.sock);
+    canvas.fill(boxMask(canvas, at, joint, [u0, SOCK_FROM, u1, v1 - lift]).and(leg), C.sock);
   }
 }
 
 function drawTail(canvas: Canvas, pose: Pose, at: Placement, marks: number): void {
-  const spine = tailSpine(pose.tail);
-  const tail = shapeMask(canvas, at, inTail(spine));
+  const joint: Joint = { pivot: TAIL_BASE, angle: pose.tail };
+  const brush: Joint = { pivot: BRUSH_JOINT, angle: pose.flick, parent: joint };
+  const tail = boxMask(canvas, at, joint, TAIL_ROOT).add(boxMask(canvas, at, brush, TAIL_BRUSH));
   canvas.sticker(tail, C.body, C.line);
-  canvas.fill(tail.minus(tail.moved(0, -2)), C.bodyLo);
-  canvas.fill(tail.minus(tail.moved(0, 1)), C.bodyHi);
+  shade(canvas, tail, C.body, C.bodyHi, C.bodyLo);
+  const half = BAND_HALF / at.k;
   for (const band of BANDS[marks]) {
-    const inBand = (u: number, v: number) => Math.abs(alongTail(spine, u, v) - band) * TAIL_LENGTH * at.k <= BAND_HALF;
-    canvas.fill(shapeMask(canvas, at, inBand, tail), C.sock);
+    canvas.fill(boxMask(canvas, at, brush, [band - half, -5, band + half, 5]).and(tail), C.sock);
   }
-  const tip = shapeMask(canvas, at, (u, v) => alongTail(spine, u, v) >= TAIL_TIP, tail);
+  const tip = boxMask(canvas, at, brush, [TAIL_BRUSH[0] - 1, -5, TAIL_TIP, 5]).and(tail);
   canvas.fill(tip, C.cream);
-  canvas.fill(tip.minus(tail.moved(0, -1)), C.creamLo);
+  canvas.fill(tip.minus(tip.moved(0, -1)), C.creamLo);
 }
 
 function drawBody(canvas: Canvas, pose: Pose, at: Placement, marks: number): Mask {
-  const head = (u: number, v: number) => inHead(...untilt(u, v, pose.tilt));
-  const body = shapeMask(canvas, at, (u, v) => inTorso(u, v) || head(u, v));
+  const head: Joint = { pivot: NECK, angle: pose.tilt };
+  const body = boxesMask(canvas, at, FIXED, [TORSO, SHOULDERS]).add(boxesMask(canvas, at, head, [HEAD, SNOUT, ...EARS].map(onHead)));
   canvas.sticker(body, C.body, C.line);
-  canvas.fill(body.minus(body.moved(0, -2)), C.bodyLo);
-  canvas.fill(body.minus(body.moved(0, 1)), C.bodyHi);
+  const lit = shade(canvas, body, C.body, C.bodyHi, C.bodyLo);
 
-  // A cream chest, cheek and jaw.
-  const cream = shapeMask(canvas, at, (u, v) => {
-    if (inDisc(u, v, [10, -14, 4.2])) return true;
-    const [hu, hv] = untilt(u, v, pose.tilt);
-    return inDisc(hu, hv, [16, -22, 3.2]) || (inSnout(hu, hv) && hv > SNOUT_Y + 1.2 * ((hu - SNOUT_FROM) / (SNOUT_TO - SNOUT_FROM)));
-  }, body);
+  const cream = boxMask(canvas, at, FIXED, CHEST).add(boxMask(canvas, at, head, onHead(JAW))).and(body);
   canvas.fill(cream, C.cream);
   canvas.fill(cream.minus(body.moved(0, -1)), C.creamLo);
-
-  const tips = shapeMask(canvas, at, (u, v) => {
-    const [hu, hv] = untilt(u, v, pose.tilt);
-    return hv < EAR_TIP && EARS.some((ear) => inTriangle(hu, hv, ear));
-  }, body);
+  const tips = boxesMask(
+    canvas,
+    at,
+    head,
+    EARS.map(([u0, v0, u1]) => onHead([u0, v0, u1, EAR_TIP])),
+  ).and(body);
   canvas.fill(tips, C.sock);
-
   if (marks > 0) {
-    const [[u0, v0], [u1, v1]] = BLAZE;
-    const blaze = shapeMask(canvas, at, (u, v) => {
-      const [hu, hv] = untilt(u, v, pose.tilt);
-      const s = clamp(((hu - u0) * (u1 - u0) + (hv - v0) * (v1 - v0)) / ((u1 - u0) ** 2 + (v1 - v0) ** 2), 0, 1);
-      return (hu - u0 - s * (u1 - u0)) ** 2 + (hv - v0 - s * (v1 - v0)) ** 2 <= 1.3 ** 2 && inDisc(hu, hv, HEAD);
-    }, body);
-    canvas.fill(blaze, C.cream);
+    const top = HEAD[1];
+    const blaze = boxMask(canvas, at, head, onHead([BLAZE[0], top, BLAZE[1], top + BLAZE_DEPTH / at.k]));
+    canvas.fill(blaze.and(body).minus(lit), C.cream);
   }
   return body;
 }
 
+/** The sprite pixel a point on its head lands on. */
+function headPixel(pose: Pose, at: Placement, [u, v]: Point): Point {
+  const head: Joint = { pivot: NECK, angle: pose.tilt };
+  const [x, y] = toSprite(at, ...outOfJoint(head, u - NECK[0], v - NECK[1]));
+  return [round(x), round(y)];
+}
+
 function drawFace(canvas: Canvas, pose: Pose, at: Placement, body: Mask, stage: number): void {
-  const [ex, ey] = toSprite(at, ...tilted(EYE, pose.tilt));
-  const x = round(ex);
-  const y = round(ey);
+  // A square eye, two pixels across, shut to its bottom row. Bigger, it gets a glint at its front.
+  const [ex, ey] = headPixel(pose, at, EYE);
+  const bx = ex - at.facing;
   const eye = canvas.mask();
   const glint = canvas.mask();
   if (pose.blink) {
-    eye.addPixel(x, y + 1).addPixel(x + 1, y + 1);
+    eye.addPixel(ex, ey + 1).addPixel(bx, ey + 1);
   } else {
-    eye.addPixel(x, y).addPixel(x + 1, y).addPixel(x, y + 1).addPixel(x + 1, y + 1);
-    if (stage >= 2) glint.addPixel(at.facing > 0 ? x + 1 : x, y);
+    eye.addPixel(ex, ey).addPixel(bx, ey).addPixel(ex, ey + 1).addPixel(bx, ey + 1);
+    if (stage >= 2) glint.addPixel(ex, ey);
   }
   canvas.fill(eye.and(body), C.eye);
   canvas.fill(glint.and(body), C.white);
 
-  const [ax, ay] = toSprite(at, ...tilted(NOSE, pose.tilt));
-  const ny = round(ay);
-  let nx = round(ax);
-  while (body.bits[ny * canvas.width + nx + at.facing]) nx += at.facing;
-  const nose = canvas.mask().addPixel(nx, ny);
-  if (stage >= 2) nose.addPixel(nx - at.facing, ny);
+  // The nose sits at the front of the snout, row by row, so it's the same size however the head turns.
+  const [nx, ny] = headPixel(pose, at, NOSE);
+  const [across, down] = NOSE_SIZE[stage];
+  const nose = canvas.mask();
+  for (let y = ny; y < ny + down; y++) {
+    let front = nx;
+    while (body.bits[y * canvas.width + front + at.facing]) front += at.facing;
+    for (let n = 0; n < across; n++) nose.addPixel(front - n * at.facing, y);
+  }
   canvas.fill(nose.and(body), C.nose);
 }
 
@@ -486,8 +452,8 @@ function draw(index: number, traits: Traits): Uint8Array {
 export const fox = defineCritter({
   id: "fox",
   name: "Fox",
-  blurb: "Trots about swishing its bushy tail. Steady, it stops to tilt its head; lively, it pounces.",
-  alt: "Animated pixel art of a fox with a bushy white-tipped tail trotting around the frame, stopping to tilt its head or leaping in a pounce",
+  blurb: "A blocky fox that trots about swishing its bushy tail. Steady, it stops to tilt its head; lively, it pounces.",
+  alt: "Animated pixel art of a chunky, blocky fox with a white-tipped tail trotting around the frame, stopping to tilt its head or leaping in a pounce",
   width: WIDTH,
   height: HEIGHT,
   frames: FRAMES,

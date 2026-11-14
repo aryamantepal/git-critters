@@ -2817,51 +2817,40 @@ var WAYPOINTS4 = [
   [92, 104],
   [52, 100]
 ];
-var TORSO = [-1, -15, 13, 6];
-var CHEST2 = [9, -16, 6];
-var NECK = [11, -20];
-var NECK_R = 4.5;
-var HEAD = [14, -25, 6];
-var SNOUT_FROM = 14;
-var SNOUT_TO = 25.5;
-var SNOUT_Y = -23;
-var SNOUT_HALF = 3.6;
+var TORSO = [-12, -18, 9, -9];
+var SHOULDERS = [5, -22, 12, -9];
+var CHEST2 = [7, -16, 12, -9];
+var NECK = [10, -21];
+var HEAD = [8, -30, 19, -19];
+var SNOUT = [19, -25, 25, -19];
+var JAW = [14, -22, 25, -19];
 var EARS = [
-  [
-    [8.5, -28],
-    [10, -36.5],
-    [13, -29]
-  ],
-  [
-    [12, -29],
-    [15.5, -38],
-    [18, -29.5]
-  ]
+  [9, -35, 12, -30],
+  [14, -35, 17, -30]
 ];
-var EAR_TIP = -34;
+var EAR_TIP = -33;
 var EYE = [16.5, -26.5];
-var NOSE = [22.5, -22];
-var LEG_LENGTH = 11;
-var LEG_R = 1.5;
-var SOCK_FROM = 0.55;
+var NOSE = [22.5, -23.5];
+var NOSE_SIZE = [[2, 1], [2, 1], [2, 2], [2, 2]];
+var LEG2 = [-1.5, 0, 1.5, 10];
+var SOCK_FROM = 6;
 var NEAR_LEGS = [
-  [8, -11, 0],
-  [-9, -11, Math.PI]
+  [8, -10, 0],
+  [-8, -10, Math.PI]
 ];
 var FAR_LEGS = [
-  [6, -11, Math.PI],
-  [-11, -11, 0]
+  [5, -10, Math.PI],
+  [-11, -10, 0]
 ];
-var TAIL_BASE = [-13, -17];
-var TAIL_LENGTH = 21;
-var TAIL_SAMPLES2 = 16;
-var TAIL_TIP = 0.8;
-var BLAZE = [
-  [13.5, -30],
-  [16, -27]
-];
-var BANDS = [[], [], [0.6], [0.6, 0.38]];
-var BAND_HALF = 0.8;
+var TAIL_BASE = [-12, -15];
+var TAIL_ROOT = [-8, -2.5, 0, 2.5];
+var BRUSH_JOINT = [-7, 0];
+var TAIL_BRUSH = [-18, -4.5, 0, 4.5];
+var TAIL_TIP = -13;
+var BLAZE = [12.5, 19];
+var BLAZE_DEPTH = 2.2;
+var BANDS = [[], [], [-10.5], [-10.5, -4.5]];
+var BAND_HALF = 0.9;
 var COLOUR_NAMES6 = [
   "rim",
   "line",
@@ -2913,7 +2902,8 @@ function facingOf(vx) {
   }
   return out;
 }
-function buildPoses5({ mood }) {
+function buildPoses5({ mood, stage }) {
+  const swing = BALANCE[mood] / STAGE_SCALE[stage];
   const events = Float64Array.from({ length: FRAMES6 }, (_, i) => eventAt(mood, i));
   const hold = mood === "steady" ? events : new Float64Array(FRAMES6);
   const { x, y, vx, vy } = holdPath(mood, hold);
@@ -2932,11 +2922,12 @@ function buildPoses5({ mood }) {
     const pouncing = mood === "lively" ? event : 0;
     const tilting = mood === "steady" ? event : 0;
     const stride = STRIDE[mood] * (1 - tilting);
-    const balance = BALANCE[mood] * Math.cos(step2[i]) * (1 - tilting);
+    const balance = swing * Math.cos(step2[i]) * (1 - tilting);
     const sway = SWAY[mood] * Math.sin(TAU * sways * i / FRAMES6);
     const wag = WAG[mood] * Math.sin(TAU * wags * i / FRAMES6);
     const swish = 0.22 * tilting * Math.cos(TAU * 2 * t);
     const tail = (0.3 + balance + sway + wag + swish) * (1 - pouncing) + 0.08 * pouncing;
+    const flick = swing * Math.sin(step2[i]) * (1 - tilting) * (1 - pouncing);
     return {
       x: x[i],
       y: y[i],
@@ -2949,6 +2940,7 @@ function buildPoses5({ mood }) {
       reach: pouncing,
       tilt: tilting * (TILT + 0.12 * Math.sin(TAU * 2 * t)),
       tail,
+      flick,
       blink: blinks.has(i)
     };
   });
@@ -2974,172 +2966,136 @@ function toSprite(at, u, v) {
   const sv = v * at.k;
   return [at.px + su * at.cos - sv * at.sin, at.py + su * at.sin + sv * at.cos];
 }
-function untilt(u, v, tilt) {
-  const c = Math.cos(tilt);
-  const s = Math.sin(tilt);
-  const du = u - NECK[0];
-  const dv = v - NECK[1];
-  return [NECK[0] + du * c + dv * s, NECK[1] - du * s + dv * c];
+var FIXED = { pivot: [0, 0], angle: 0 };
+function intoJoint({ pivot, angle, parent }, u, v) {
+  const [pu, pv] = parent ? intoJoint(parent, u, v) : [u, v];
+  const du = pu - pivot[0];
+  const dv = pv - pivot[1];
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [du * c + dv * s, -du * s + dv * c];
 }
-function tilted([u, v], tilt) {
-  return untilt(u, v, -tilt);
+function outOfJoint({ pivot, angle, parent }, lu, lv) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const u = pivot[0] + lu * c - lv * s;
+  const v = pivot[1] + lu * s + lv * c;
+  return parent ? outOfJoint(parent, u, v) : [u, v];
 }
-function shapeMask(canvas, at, inside, within) {
+function boxMask(canvas, at, joint, [u0, v0, u1, v1]) {
   const mask = canvas.mask();
-  for (let y = 0; y < canvas.height; y++) {
-    for (let x = 0; x < canvas.width; x++) {
-      if (within && !within.bits[y * canvas.width + x]) continue;
-      const [u, v] = toBody(at, x, y);
-      if (inside(u, v)) mask.addPixel(x, y);
+  const corners = [
+    [u0, v0],
+    [u1, v0],
+    [u0, v1],
+    [u1, v1]
+  ].map(([u, v]) => toSprite(at, ...outOfJoint(joint, u, v)));
+  const left = Math.max(0, Math.floor(Math.min(...corners.map((c) => c[0]))) - 1);
+  const right = Math.min(canvas.width - 1, Math.ceil(Math.max(...corners.map((c) => c[0]))) + 1);
+  const top = Math.max(0, Math.floor(Math.min(...corners.map((c) => c[1]))) - 1);
+  const bottom = Math.min(canvas.height - 1, Math.ceil(Math.max(...corners.map((c) => c[1]))) + 1);
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) {
+      const [lu, lv] = intoJoint(joint, ...toBody(at, x, y));
+      if (lu >= u0 && lu <= u1 && lv >= v0 && lv <= v1) mask.addPixel(x, y);
     }
   }
   return mask;
 }
-function inDisc(u, v, [cx, cy, r]) {
-  return (u - cx) ** 2 + (v - cy) ** 2 <= r * r;
+function boxesMask(canvas, at, joint, boxes) {
+  const mask = canvas.mask();
+  for (const box2 of boxes) mask.add(boxMask(canvas, at, joint, box2));
+  return mask;
 }
-function inTriangle(u, v, [a, b, c]) {
-  const side = (p, q) => (q[0] - p[0]) * (v - p[1]) - (q[1] - p[1]) * (u - p[0]);
-  const d1 = side(a, b);
-  const d2 = side(b, c);
-  const d3 = side(c, a);
-  return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+function onHead([u0, v0, u1, v1]) {
+  return [u0 - NECK[0], v0 - NECK[1], u1 - NECK[0], v1 - NECK[1]];
 }
-function inSnout(u, v) {
-  const s = (u - SNOUT_FROM) / (SNOUT_TO - SNOUT_FROM);
-  if (s < 0 || s > 1) return false;
-  return Math.abs(v - (SNOUT_Y + 1.2 * s)) <= SNOUT_HALF * (1 - s) + 0.6;
+function shade(canvas, mask, fill, high, low) {
+  const lit = mask.minus(mask.moved(0, 1));
+  canvas.fill(mask, fill);
+  canvas.fill(mask.minus(mask.moved(0, -2)), low);
+  canvas.fill(lit, high);
+  return lit;
 }
-function inHead(u, v) {
-  return inDisc(u, v, HEAD) || inSnout(u, v) || EARS.some((ear) => inTriangle(u, v, ear));
-}
-function inTorso(u, v) {
-  const [cx, cy, rx, ry] = TORSO;
-  return ((u - cx) / rx) ** 2 + ((v - cy) / ry) ** 2 <= 1 || inDisc(u, v, CHEST2) || inDisc(u, v, [NECK[0], NECK[1], NECK_R]);
-}
-function tailSpine(angle) {
-  const points = [];
-  let [u, v] = TAIL_BASE;
-  const piece = TAIL_LENGTH / TAIL_SAMPLES2;
-  for (let j = 0; j <= TAIL_SAMPLES2; j++) {
-    const t = j / TAIL_SAMPLES2;
-    const r = 2.2 + 4.3 * Math.sin(Math.PI * Math.min(1, t * 1.15)) ** 0.8;
-    points.push({ u, v, r, t });
-    const a = angle - 0.6 * t;
-    u -= piece * Math.cos(a);
-    v -= piece * Math.sin(a);
-  }
-  return points;
-}
-function inTail(spine) {
-  return (u, v) => spine.some((p) => (u - p.u) ** 2 + (v - p.v) ** 2 <= p.r * p.r);
-}
-function alongTail(spine, u, v) {
-  let best = 0;
-  let bestDistance = Infinity;
-  for (let j = 1; j < spine.length; j++) {
-    const a = spine[j - 1];
-    const b = spine[j];
-    const du = b.u - a.u;
-    const dv = b.v - a.v;
-    const s = clamp(((u - a.u) * du + (v - a.v) * dv) / (du * du + dv * dv), 0, 1);
-    const distance = (u - a.u - s * du) ** 2 + (v - a.v - s * dv) ** 2;
-    if (distance < bestDistance) {
-      best = a.t + s * (b.t - a.t);
-      bestDistance = distance;
-    }
-  }
-  return best;
-}
-function pawOf(pose, [hx, hy, phase]) {
+function legOf(pose, [hx, hy, phase]) {
   const front = hx > 0;
   const trot = 0.45 * pose.stride * Math.sin(pose.step + phase);
   const leap = front ? 0.9 : -0.8;
-  const angle = trot * (1 - pose.reach) + leap * pose.reach;
-  const lift = 1.8 * pose.stride * Math.max(0, Math.cos(pose.step + phase)) * (1 - pose.reach);
-  return [hx + LEG_LENGTH * Math.sin(angle), hy + LEG_LENGTH * Math.cos(angle) - lift];
+  const swing = trot * (1 - pose.reach) + leap * pose.reach;
+  const lift = 1.8 * pose.stride * Math.max(0, Math.cos(pose.step + phase)) * (1 - pose.reach) + 2 * pose.reach;
+  return { joint: { pivot: [hx, hy], angle: -swing }, lift };
 }
 function drawLegs(canvas, pose, at, legs, fill) {
   for (const hip of legs) {
-    const [hx, hy] = hip;
-    const [fx, fy] = pawOf(pose, hip);
-    const along = (u, v) => {
-      const du = fx - hx;
-      const dv = fy - hy;
-      return clamp(((u - hx) * du + (v - hy) * dv) / (du * du + dv * dv), 0, 1);
-    };
-    const near = (u, v) => {
-      const s = along(u, v);
-      return (u - hx - s * (fx - hx)) ** 2 + (v - hy - s * (fy - hy)) ** 2 <= LEG_R * LEG_R;
-    };
-    const leg = shapeMask(canvas, at, near);
+    const { joint, lift } = legOf(pose, hip);
+    const [u0, v0, u1, v1] = LEG2;
+    const leg = boxMask(canvas, at, joint, [u0, v0, u1, v1 - lift]);
     canvas.sticker(leg, fill, C6.line);
-    canvas.fill(shapeMask(canvas, at, (u, v) => along(u, v) >= SOCK_FROM, leg), C6.sock);
+    canvas.fill(boxMask(canvas, at, joint, [u0, SOCK_FROM, u1, v1 - lift]).and(leg), C6.sock);
   }
 }
 function drawTail2(canvas, pose, at, marks) {
-  const spine = tailSpine(pose.tail);
-  const tail = shapeMask(canvas, at, inTail(spine));
+  const joint = { pivot: TAIL_BASE, angle: pose.tail };
+  const brush = { pivot: BRUSH_JOINT, angle: pose.flick, parent: joint };
+  const tail = boxMask(canvas, at, joint, TAIL_ROOT).add(boxMask(canvas, at, brush, TAIL_BRUSH));
   canvas.sticker(tail, C6.body, C6.line);
-  canvas.fill(tail.minus(tail.moved(0, -2)), C6.bodyLo);
-  canvas.fill(tail.minus(tail.moved(0, 1)), C6.bodyHi);
+  shade(canvas, tail, C6.body, C6.bodyHi, C6.bodyLo);
+  const half = BAND_HALF / at.k;
   for (const band of BANDS[marks]) {
-    const inBand = (u, v) => Math.abs(alongTail(spine, u, v) - band) * TAIL_LENGTH * at.k <= BAND_HALF;
-    canvas.fill(shapeMask(canvas, at, inBand, tail), C6.sock);
+    canvas.fill(boxMask(canvas, at, brush, [band - half, -5, band + half, 5]).and(tail), C6.sock);
   }
-  const tip = shapeMask(canvas, at, (u, v) => alongTail(spine, u, v) >= TAIL_TIP, tail);
+  const tip = boxMask(canvas, at, brush, [TAIL_BRUSH[0] - 1, -5, TAIL_TIP, 5]).and(tail);
   canvas.fill(tip, C6.cream);
-  canvas.fill(tip.minus(tail.moved(0, -1)), C6.creamLo);
+  canvas.fill(tip.minus(tip.moved(0, -1)), C6.creamLo);
 }
 function drawBody4(canvas, pose, at, marks) {
-  const head = (u, v) => inHead(...untilt(u, v, pose.tilt));
-  const body = shapeMask(canvas, at, (u, v) => inTorso(u, v) || head(u, v));
+  const head = { pivot: NECK, angle: pose.tilt };
+  const body = boxesMask(canvas, at, FIXED, [TORSO, SHOULDERS]).add(boxesMask(canvas, at, head, [HEAD, SNOUT, ...EARS].map(onHead)));
   canvas.sticker(body, C6.body, C6.line);
-  canvas.fill(body.minus(body.moved(0, -2)), C6.bodyLo);
-  canvas.fill(body.minus(body.moved(0, 1)), C6.bodyHi);
-  const cream = shapeMask(canvas, at, (u, v) => {
-    if (inDisc(u, v, [10, -14, 4.2])) return true;
-    const [hu, hv] = untilt(u, v, pose.tilt);
-    return inDisc(hu, hv, [16, -22, 3.2]) || inSnout(hu, hv) && hv > SNOUT_Y + 1.2 * ((hu - SNOUT_FROM) / (SNOUT_TO - SNOUT_FROM));
-  }, body);
+  const lit = shade(canvas, body, C6.body, C6.bodyHi, C6.bodyLo);
+  const cream = boxMask(canvas, at, FIXED, CHEST2).add(boxMask(canvas, at, head, onHead(JAW))).and(body);
   canvas.fill(cream, C6.cream);
   canvas.fill(cream.minus(body.moved(0, -1)), C6.creamLo);
-  const tips = shapeMask(canvas, at, (u, v) => {
-    const [hu, hv] = untilt(u, v, pose.tilt);
-    return hv < EAR_TIP && EARS.some((ear) => inTriangle(hu, hv, ear));
-  }, body);
+  const tips = boxesMask(
+    canvas,
+    at,
+    head,
+    EARS.map(([u0, v0, u1]) => onHead([u0, v0, u1, EAR_TIP]))
+  ).and(body);
   canvas.fill(tips, C6.sock);
   if (marks > 0) {
-    const [[u0, v0], [u1, v1]] = BLAZE;
-    const blaze = shapeMask(canvas, at, (u, v) => {
-      const [hu, hv] = untilt(u, v, pose.tilt);
-      const s = clamp(((hu - u0) * (u1 - u0) + (hv - v0) * (v1 - v0)) / ((u1 - u0) ** 2 + (v1 - v0) ** 2), 0, 1);
-      return (hu - u0 - s * (u1 - u0)) ** 2 + (hv - v0 - s * (v1 - v0)) ** 2 <= 1.3 ** 2 && inDisc(hu, hv, HEAD);
-    }, body);
-    canvas.fill(blaze, C6.cream);
+    const top = HEAD[1];
+    const blaze = boxMask(canvas, at, head, onHead([BLAZE[0], top, BLAZE[1], top + BLAZE_DEPTH / at.k]));
+    canvas.fill(blaze.and(body).minus(lit), C6.cream);
   }
   return body;
 }
+function headPixel(pose, at, [u, v]) {
+  const head = { pivot: NECK, angle: pose.tilt };
+  const [x, y] = toSprite(at, ...outOfJoint(head, u - NECK[0], v - NECK[1]));
+  return [round(x), round(y)];
+}
 function drawFace2(canvas, pose, at, body, stage) {
-  const [ex, ey] = toSprite(at, ...tilted(EYE, pose.tilt));
-  const x = round(ex);
-  const y = round(ey);
+  const [ex, ey] = headPixel(pose, at, EYE);
+  const bx = ex - at.facing;
   const eye = canvas.mask();
   const glint = canvas.mask();
   if (pose.blink) {
-    eye.addPixel(x, y + 1).addPixel(x + 1, y + 1);
+    eye.addPixel(ex, ey + 1).addPixel(bx, ey + 1);
   } else {
-    eye.addPixel(x, y).addPixel(x + 1, y).addPixel(x, y + 1).addPixel(x + 1, y + 1);
-    if (stage >= 2) glint.addPixel(at.facing > 0 ? x + 1 : x, y);
+    eye.addPixel(ex, ey).addPixel(bx, ey).addPixel(ex, ey + 1).addPixel(bx, ey + 1);
+    if (stage >= 2) glint.addPixel(ex, ey);
   }
   canvas.fill(eye.and(body), C6.eye);
   canvas.fill(glint.and(body), C6.white);
-  const [ax, ay] = toSprite(at, ...tilted(NOSE, pose.tilt));
-  const ny = round(ay);
-  let nx = round(ax);
-  while (body.bits[ny * canvas.width + nx + at.facing]) nx += at.facing;
-  const nose = canvas.mask().addPixel(nx, ny);
-  if (stage >= 2) nose.addPixel(nx - at.facing, ny);
+  const [nx, ny] = headPixel(pose, at, NOSE);
+  const [across, down] = NOSE_SIZE[stage];
+  const nose = canvas.mask();
+  for (let y = ny; y < ny + down; y++) {
+    let front = nx;
+    while (body.bits[y * canvas.width + front + at.facing]) front += at.facing;
+    for (let n = 0; n < across; n++) nose.addPixel(front - n * at.facing, y);
+  }
   canvas.fill(nose.and(body), C6.nose);
 }
 function renderSprite5(pose, traits) {
@@ -3164,8 +3120,8 @@ function draw6(index, traits) {
 var fox = defineCritter({
   id: "fox",
   name: "Fox",
-  blurb: "Trots about swishing its bushy tail. Steady, it stops to tilt its head; lively, it pounces.",
-  alt: "Animated pixel art of a fox with a bushy white-tipped tail trotting around the frame, stopping to tilt its head or leaping in a pounce",
+  blurb: "A blocky fox that trots about swishing its bushy tail. Steady, it stops to tilt its head; lively, it pounces.",
+  alt: "Animated pixel art of a chunky, blocky fox with a white-tipped tail trotting around the frame, stopping to tilt its head or leaping in a pounce",
   width: WIDTH6,
   height: HEIGHT6,
   frames: FRAMES6,
@@ -4045,7 +4001,7 @@ function drawTentacles(canvas, pose, k, count) {
 }
 function drawArms2(canvas, pose, k) {
   const arms = canvas.mask();
-  const shade2 = canvas.mask();
+  const shade3 = canvas.mask();
   for (const [f, reach] of [
     [-0.42, 22],
     [0.4, 24],
@@ -4060,11 +4016,11 @@ function drawArms2(canvas, pose, k) {
       const x = ORIGIN5 + f * 12 * k * (1 - 0.3 * s) + wave + trail + frill;
       const y = TOP2 + k + s * length;
       arms.addDisc(x, y, (2.5 - 1.7 * s) * k);
-      if (n % 3 === 0) shade2.addDisc(x + 0.6, y, 0.9 * k);
+      if (n % 3 === 0) shade3.addDisc(x + 0.6, y, 0.9 * k);
     }
   }
   canvas.sticker(arms, C9.arm, C9.line);
-  canvas.fill(shade2.and(arms), C9.armLo);
+  canvas.fill(shade3.and(arms), C9.armLo);
 }
 function drawBell(canvas, pose, traits, k) {
   const bell = canvas.mask().addPolygon(bellOutline(pose, k, traits.stage < 2 ? 6 : LOBES));
@@ -4766,7 +4722,7 @@ function roundRect(mask, x0, y0, x1, y1, radius) {
   }
   return mask;
 }
-function shade(canvas, shape, low, high) {
+function shade2(canvas, shape, low, high) {
   canvas.fill(shape.minus(shape.moved(-2, -2)), low);
   canvas.fill(shape.minus(shape.moved(1, 2)), high);
 }
@@ -4794,7 +4750,7 @@ function renderSprite9(pose, traits) {
   canvas.fill(pad.minus(pad.moved(0, -1)), C11.steelLo);
   const body = box2(baseX, 9, 2, 16, 4);
   canvas.sticker(body, C11.body, C11.line);
-  shade(canvas, body, C11.bodyLo, C11.bodyHi);
+  shade2(canvas, body, C11.bodyLo, C11.bodyHi);
   const panel = box2(baseX, 5, 6, 13, 1);
   canvas.fill(panel, C11.steel);
   canvas.fill(panel.minus(panel.moved(0, -1)), C11.steelLo);
@@ -4838,7 +4794,7 @@ function renderSprite9(pose, traits) {
   canvas.fill(ears.minus(ears.moved(-1, 0)), C11.steelLo);
   const head = box2(headX, 14, -17, 3, 5);
   canvas.sticker(head, C11.body, C11.line);
-  shade(canvas, head, C11.bodyLo, C11.bodyHi);
+  shade2(canvas, head, C11.bodyLo, C11.bodyHi);
   const screen = box2(headX, 10, -13, -1, 2);
   canvas.fill(screen, C11.screen);
   drawFace5(canvas, pose, headX, s, stage);
