@@ -5312,14 +5312,16 @@ function needsKeepAlive(latestCommit, now) {
 var START = "<!-- git-critters:start -->";
 var END = "<!-- git-critters:end -->";
 var KIT_URL = "https://github.com/aryamantepal/git-critters";
+var README_CRITTER_WIDTH = 720;
+var README_CRITTER_ALT = "An evolving pixel-art git-critter";
 function escapeAttribute(text) {
   return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
-function critterBlock(critter, gifPath) {
+function critterBlock(gifPath) {
   return [
     START,
     '<p align="center">',
-    `  <img src="${escapeAttribute(gifPath)}" width="${critter.width * SCALE}" alt="${escapeAttribute(critter.alt)}" />`,
+    `  <img src="${escapeAttribute(gifPath)}" width="${README_CRITTER_WIDTH}" alt="${README_CRITTER_ALT}" />`,
     "  <br />",
     `  <sub>Made with <a href="${KIT_URL}">git-critters</a></sub>`,
     "</p>",
@@ -5343,9 +5345,7 @@ var OTHER_CREATURE_LEFTOVERS = "This takes the place of your git-koi koi. Its wo
 function withCritterBlock(readme, block) {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
-  if (start !== -1 && end > start) {
-    return readme.slice(0, start) + block + readme.slice(end + END.length);
-  }
+  if (start !== -1 && end > start) return readme;
   const other = otherCreature(readme);
   if (other) return readme.slice(0, other.start) + block + readme.slice(other.end);
   return readme.trim() === "" ? `${block}
@@ -5475,22 +5475,22 @@ async function main() {
       } else {
         console.log("Drawing the default critter for now.");
       }
-      const hatching = eggOn && readme.includes(egg.alt);
-      const article = /^[aeiou]/i.test(critter.name) ? "an" : "a";
       plan = {
         critter,
         colourway,
         traits,
-        message: hatching ? `critter: the egg hatched into ${article} ${critter.name.toLowerCase()}` : `critter: draw the ${critter.id} for ${yesterday(now)}`,
+        message: `critter: draw the ${critter.id} for ${yesterday(now)}`,
         added: `Added the ${critter.id}`
       };
     }
   }
   (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(gifPath), { recursive: true });
   (0, import_node_fs.writeFileSync)(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
-  (0, import_node_fs.writeFileSync)(readmeName, withCritterBlock(readme, critterBlock(plan.critter, gifPath)));
+  const nextReadme = withCritterBlock(readme, critterBlock(gifPath));
+  const readmeChanged = nextReadme !== readme;
+  if (readmeChanged) (0, import_node_fs.writeFileSync)(readmeName, nextReadme);
   if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
-  git("add", "--force", "--", gifPath, readmeName);
+  git("add", "--force", "--", gifPath, ...readmeChanged ? [readmeName] : []);
   if (git("diff", "--cached", "--name-only").trim() === "") {
     console.log("The critter is already up to date, so there's nothing to commit.");
     if (activity && needsKeepAlive(new Date(git("log", "-1", "--format=%cI").trim()), now)) {

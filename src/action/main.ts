@@ -173,16 +173,11 @@ async function main(): Promise<void> {
       } else {
         console.log("Drawing the default critter for now.");
       }
-      // The egg's own block is how a hatching is told from any other night.
-      const hatching = eggOn && readme.includes(egg.alt);
-      const article = /^[aeiou]/i.test(critter.name) ? "an" : "a";
       plan = {
         critter,
         colourway,
         traits,
-        message: hatching
-          ? `critter: the egg hatched into ${article} ${critter.name.toLowerCase()}`
-          : `critter: draw the ${critter.id} for ${yesterday(now)}`,
+        message: `critter: draw the ${critter.id} for ${yesterday(now)}`,
         added: `Added the ${critter.id}`,
       };
     }
@@ -190,11 +185,13 @@ async function main(): Promise<void> {
 
   mkdirSync(dirname(gifPath), { recursive: true });
   writeFileSync(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
-  writeFileSync(readmeName, withCritterBlock(readme, critterBlock(plan.critter, gifPath)));
+  const nextReadme = withCritterBlock(readme, critterBlock(gifPath));
+  const readmeChanged = nextReadme !== readme;
+  if (readmeChanged) writeFileSync(readmeName, nextReadme);
   if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
 
   // Forced, because someone's .gitignore shouldn't stop their critter from appearing.
-  git("add", "--force", "--", gifPath, readmeName);
+  git("add", "--force", "--", gifPath, ...(readmeChanged ? [readmeName] : []));
   if (git("diff", "--cached", "--name-only").trim() === "") {
     console.log("The critter is already up to date, so there's nothing to commit.");
     // Scheduled workflows stop after 60 days of silence, so an unchanged critter still needs a commit now and then.

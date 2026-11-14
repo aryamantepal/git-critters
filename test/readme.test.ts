@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { critterBlock, hasOtherCreature, withCritterBlock } from "../src/action/readme.ts";
-import { dragon } from "../src/critters/dragon.ts";
-import { ghost } from "../src/critters/ghost.ts";
+import { critterBlock, hasOtherCreature, README_CRITTER_ALT, withCritterBlock } from "../src/action/readme.ts";
 
-const block = critterBlock(dragon, "critter.gif");
+const block = critterBlock("critter.gif");
 
-test("the block is a centred image with alt text and a credit", () => {
+test("the starter block is a centred image with neutral alt text and a credit", () => {
   assert.match(block, /<p align="center">/);
   assert.match(block, /src="critter\.gif"/);
   assert.match(block, /width="720"/);
-  assert.ok(block.includes(`alt="${dragon.alt}"`));
+  assert.ok(block.includes(`alt="${README_CRITTER_ALT}"`));
   assert.match(block, /git-critters<\/a>/);
 });
 
@@ -24,11 +22,12 @@ test("fills an empty README", () => {
   assert.equal(withCritterBlock("  \n", block), `${block}\n`);
 });
 
-test("swaps an earlier critter in place instead of adding another", () => {
-  const before = `# Hello\n\n${block}\n\nThe rest.\n`;
-  const swapped = critterBlock(ghost, "critter.gif");
-  const after = withCritterBlock(before, swapped);
-  assert.equal(after, `# Hello\n\n${swapped}\n\nThe rest.\n`);
+test("preserves a user's marked critter block byte for byte", () => {
+  const customised = block.replace('align="center"', 'align="left"').replace('width="720"', 'width="180"');
+  assert.notEqual(customised, block);
+  const before = `# Hello\n\n${customised}\n\nThe rest.\n`;
+  const after = withCritterBlock(before, block);
+  assert.equal(after, before);
   assert.equal(after.match(/git-critters:start/g)?.length, 1);
 });
 
@@ -55,8 +54,7 @@ test("takes the place of a git-koi koi, leaving the rest untouched", () => {
 
 test("an earlier critter wins over a koi, so the koi stays put", () => {
   const before = `${koi}\n\n${block}\n`;
-  const swapped = critterBlock(ghost, "critter.gif");
-  assert.equal(withCritterBlock(before, swapped), `${koi}\n\n${swapped}\n`);
+  assert.equal(withCritterBlock(before, block), before);
 });
 
 test("a link to git-koi without its image is left alone", () => {

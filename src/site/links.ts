@@ -11,7 +11,7 @@ export function isValidUsername(name: string): boolean {
 
 /** The one small file someone commits to get their username-derived hatchling. */
 export function workflowFile(): string {
-  return `# Draws a pixel-art critter from your GitHub activity and adds it to the top of this README.
+  return `# Draws a pixel-art critter from your GitHub activity and adds it to this README.
 # Your username determines which critter is inside the egg: ${SITE_URL}
 name: Critter
 

@@ -6,10 +6,10 @@ Pixel-art critters for your GitHub profile README. Add an egg in one click and d
 
 ## How it works
 
-1. On the site, enter your GitHub username. The preview shows the egg on top of your real README, in GitHub's light and dark themes.
+1. On the site, enter your GitHub username. The preview shows the egg with your real README content, in GitHub's light and dark themes.
 2. **Add to my GitHub** opens GitHub's new-file page with one small workflow already filled in.
 3. You commit it. Choose "Create a new branch" on that screen if you'd rather review it as a pull request.
-4. The workflow draws the critter, saves `critter.gif`, and adds it to the top of your README. If you already show a koi from [git-koi](https://github.com/yalongwastaken/git-koi), the critter takes its place instead. Your other text stays as it is.
+4. The workflow draws the critter, saves `critter.gif`, and adds a starter block to your README. If you already show a koi from [git-koi](https://github.com/yalongwastaken/git-koi), the critter takes its place instead. Your other text stays as it is.
 5. Every night, just after midnight UTC, it runs again and redraws the critter from your public GitHub activity.
 
 ### The egg
@@ -47,7 +47,7 @@ Each night's run commits only when the GIF changes, which adds roughly 300 to 80
 Add this to your profile repo (the one named after your username) as `.github/workflows/critter.yml`:
 
 ```yaml
-# Draws a pixel-art critter from your GitHub activity and adds it to the top of this README.
+# Draws a pixel-art critter from your GitHub activity and adds it to this README.
 # Your username determines which critter is inside the egg: https://critters.aryamantepal.com
 name: Critter
 
@@ -89,6 +89,24 @@ The site and the workflow above intentionally offer no species choice. For backw
 | `bat` | `dusk`, `cocoa`, `mist` |
 
 Leaving `critter` and `colour` out gives you the automatic egg and language colours. Existing workflows with `critter: surprise`, a named critter, `egg`, or a fixed `colour` continue to work, but the site no longer generates those choices.
+
+### Customise the README layout
+
+The Action creates the block between `<!-- git-critters:start -->` and `<!-- git-critters:end -->` once. After that, the marked block belongs to you: nightly runs update only `critter.gif` and preserve the README byte for byte. Keep both marker comments and keep the image pointed at `critter.gif`, but move or rewrite everything between them however you like.
+
+GitHub removes custom CSS, inline styles, classes and IDs from rendered Markdown. Use GitHub-supported Markdown and HTML instead, such as image `align` and `width`, tables, `<details>`, and `<picture>`. For example, a borderless side-by-side layout can start with:
+
+```html
+<!-- git-critters:start -->
+<a href="https://github.com/aryamantepal/git-critters">
+  <img align="right" width="240" src="critter.gif" alt="An evolving pixel-art git-critter" />
+</a>
+<!-- git-critters:end -->
+
+# Hi, I'm your name
+
+Your introduction flows beside the critter.
+```
 
 To remove git-critters, delete the workflow, `critter.gif`, and the block between the `git-critters` comments in your README.
 

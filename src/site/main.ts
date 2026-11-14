@@ -285,6 +285,7 @@ function renderAction(): void {
 }
 
 function showReadme(profile: Profile | null): void {
+  // The critter may sit inside the old README, so take it out before that goes.
   readmeContent.before(critterParagraph);
   if (profile?.kind === "ready" && profile.readmeHtml) {
     readmeContent.replaceChildren(prepareReadme(profile.readmeHtml, profile.login, profile.branch));
