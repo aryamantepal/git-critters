@@ -79,8 +79,14 @@ describe("the automatic hatchling", () => {
       assert.ok(!Number.isNaN(Date.parse(entry.introducedAt)), entry.id);
       // No entry may predate the epoch, and the original pool is locked to that day.
       assert.ok(Date.parse(entry.introducedAt) >= Date.parse(POOL_EPOCH), entry.id);
-      if (HATCHLING_POOL.indexOf(entry) < 12) assert.equal(entry.introducedAt, POOL_EPOCH, entry.id);
+      if (HATCHLING_POOL.indexOf(entry) < 10) assert.equal(entry.introducedAt, POOL_EPOCH, entry.id);
     }
+  });
+
+  test("penguin and fox join at the moment v1 shipped them, not at the epoch", () => {
+    const ten = HATCHLING_POOL.slice(0, 10);
+    assert.deepEqual(poolFor(new Date("2026-11-16T22:46:06Z")), ten);
+    assert.deepEqual(poolFor(new Date("2026-11-16T22:46:07Z")), HATCHLING_POOL);
   });
 });
 
@@ -90,12 +96,13 @@ describe("pool epochs", () => {
   const beforeFuture = new Date("2026-11-20T00:00:00Z");
   const afterFuture = new Date(FUTURE);
 
-  test("no date sees the whole pool, and any date from the epoch on sees the original pool", () => {
+  test("no date sees the whole pool, and the epoch and anything earlier see the original ten", () => {
+    const ten = HATCHLING_POOL.slice(0, 10);
     assert.deepEqual(poolFor(undefined), HATCHLING_POOL);
-    assert.deepEqual(poolFor(new Date(POOL_EPOCH)), HATCHLING_POOL);
+    assert.deepEqual(poolFor(new Date(POOL_EPOCH)), ten);
     assert.deepEqual(poolFor(beforeFuture), HATCHLING_POOL);
     // Before the epoch the original pool is still the fallback.
-    assert.deepEqual(poolFor(new Date("2020-01-01T00:00:00Z")), HATCHLING_POOL);
+    assert.deepEqual(poolFor(new Date("2020-01-01T00:00:00Z")), ten);
   });
 
   test("appending a future critter never changes an earlier workflow's hatchling", () => {
@@ -236,11 +243,21 @@ describe("when the workflow was added", () => {
     assert.deepEqual(windowsOf(calls), [["y2026", "2026-11-02T10:00:00.000Z", "2026-11-06T00:37:12.000Z"]]);
   });
 
-  test("no commits means it was added just now", async () => {
+  test("no commits means contributions count from now, but the pool stays at the epoch", async () => {
     const { impl, calls } = fakeFetch(() => ({ body: [] }));
     const reading = await read(impl);
     assert.deepEqual(reading.addedAt, NOW);
+    assert.deepEqual(reading.poolDate, new Date(POOL_EPOCH));
     assert.deepEqual(windowsOf(calls), [["y2026", NOW.toISOString(), NOW.toISOString()]]);
+  });
+
+  test("uses the author date, which survives a rebase that moves the committer date", async () => {
+    const { impl } = fakeFetch(() => ({
+      body: [{ commit: { author: { date: "2026-11-02T10:00:00Z" }, committer: { date: "2026-11-05T12:00:00Z" } } }],
+    }));
+    const reading = await read(impl);
+    assert.deepEqual(reading.addedAt, new Date("2026-11-02T10:00:00Z"));
+    assert.deepEqual(reading.poolDate, new Date("2026-11-02T10:00:00Z"));
   });
 
   test("falls back to the usual workflow path when there's no GITHUB_WORKFLOW_REF", async () => {
