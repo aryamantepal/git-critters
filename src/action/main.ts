@@ -161,7 +161,7 @@ async function main(): Promise<void> {
       }
     } else {
       // The workflow's age picks the pool epoch, so a hatched critter never changes species later.
-      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login, reading?.egg?.addedAt))!;
+      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login, reading?.egg?.poolDate))!;
       let colourway: string | Colourway = fixed ? colour : critter.colourways[0].id;
       let traits: Traits = DEFAULT_TRAITS;
       if (reading) {
