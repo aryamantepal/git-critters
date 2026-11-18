@@ -159,7 +159,7 @@ function crackLevelFor(contributions) {
 function hasHatched(contributions) {
   return contributions >= HATCH_AFTER;
 }
-var POOL_EPOCH = "2026-11-14";
+var POOL_EPOCH = "2026-11-14T00:00:00Z";
 var HATCHLING_POOL = Object.freeze([
   { id: "dragon", introducedAt: POOL_EPOCH },
   { id: "axolotl", introducedAt: POOL_EPOCH },
