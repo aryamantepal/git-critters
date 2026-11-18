@@ -6133,8 +6133,8 @@ async function readEggContributions(request, env) {
 // src/action/asset.ts
 var import_node_fs = require("node:fs");
 function assetRawUrl(repository, branch, gifPath) {
-  const path = gifPath.split("/").map(encodeURIComponent).join("/");
-  return `https://raw.githubusercontent.com/${repository}/${branch}/${path}`;
+  const encode = (text) => text.split("/").map(encodeURIComponent).join("/");
+  return `https://raw.githubusercontent.com/${repository}/${encode(branch)}/${encode(gifPath)}`;
 }
 function isCritterSrc(repository, gifPath) {
   const prefix = `https://raw.githubusercontent.com/${repository}/`;

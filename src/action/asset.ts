@@ -11,8 +11,9 @@ export interface AssetPush {
 
 /** The README-facing URL of the GIF on the asset branch; a relative src would resolve against the default branch. */
 export function assetRawUrl(repository: string, branch: string, gifPath: string): string {
-  const path = gifPath.split("/").map(encodeURIComponent).join("/");
-  return `https://raw.githubusercontent.com/${repository}/${branch}/${path}`;
+  // Git allows # and % in branch names, so the branch is encoded like the path.
+  const encode = (text: string) => text.split("/").map(encodeURIComponent).join("/");
+  return `https://raw.githubusercontent.com/${repository}/${encode(branch)}/${encode(gifPath)}`;
 }
 
 /**

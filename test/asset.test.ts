@@ -48,6 +48,13 @@ describe("pushing the GIF to an asset branch", () => {
     assert.equal(assetRawUrl("sam/sam", "critter-output", "assets/critter.gif"), "https://raw.githubusercontent.com/sam/sam/critter-output/assets/critter.gif");
   });
 
+  test("the raw URL encodes # and % in the branch, keeping its slashes", () => {
+    assert.equal(
+      assetRawUrl("sam/sam", "art/critters#out%2F", "critter.gif"),
+      "https://raw.githubusercontent.com/sam/sam/art/critters%23out%252F/critter.gif",
+    );
+  });
+
   test("the raw URL encodes odd path segments", () => {
     assert.equal(assetRawUrl("sam/sam", "b", "my pics/critter.gif"), "https://raw.githubusercontent.com/sam/sam/b/my%20pics/critter.gif");
   });
