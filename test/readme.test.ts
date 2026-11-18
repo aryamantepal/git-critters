@@ -12,6 +12,15 @@ test("the starter block is a centred image with neutral alt text and a credit", 
   assert.match(block, /git-critters<\/a>/);
 });
 
+test("clicking the critter image goes to the site, not the raw blob viewer", () => {
+  assert.match(block, /<a href="https:\/\/critters\.aryamantepal\.com">\n {4}<img src="critter\.gif"/);
+  assert.ok(!/\[<img|\]\(critter\.gif\)/.test(block), "the image must be wrapped in a link, not Markdown-linked");
+});
+
+test("the credit links the repo and the onboarding site", () => {
+  assert.match(block, /Made with <a href="https:\/\/github\.com\/aryamantepal\/git-critters">git-critters<\/a> \| <a href="https:\/\/critters\.aryamantepal\.com">Hatch your own<\/a>/);
+});
+
 test("goes above what's already in a README, leaving it untouched", () => {
   const readme = "# Hello\n\nI like **bold** things.\n";
   assert.equal(withCritterBlock(readme, block), `${block}\n\n${readme}`);

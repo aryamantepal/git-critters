@@ -1,3 +1,5 @@
+import { SITE_URL } from "../site/links.ts";
+
 const START = "<!-- git-critters:start -->";
 const END = "<!-- git-critters:end -->";
 
@@ -13,9 +15,11 @@ export function critterBlock(gifPath: string): string {
   return [
     START,
     '<p align="center">',
-    `  <img src="${escapeAttribute(gifPath)}" width="${README_CRITTER_WIDTH}" alt="${README_CRITTER_ALT}" />`,
+    `  <a href="${SITE_URL}">`,
+    `    <img src="${escapeAttribute(gifPath)}" width="${README_CRITTER_WIDTH}" alt="${README_CRITTER_ALT}" />`,
+    "  </a>",
     "  <br />",
-    `  <sub>Made with <a href="${KIT_URL}">git-critters</a></sub>`,
+    `  <sub>Made with <a href="${KIT_URL}">git-critters</a> | <a href="${SITE_URL}">Hatch your own</a></sub>`,
     "</p>",
     END,
   ].join("\n");
