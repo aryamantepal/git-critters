@@ -2,11 +2,12 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
+import { crc32, deflateSync, inflateSync } from "node:zlib";
 import { HATCH_AFTER } from "../src/activity/egg.ts";
 import { LIVELY_FROM, MARKS_FROM, STAGE_FROM } from "../src/activity/traits.ts";
 import { critters } from "../src/critters/index.ts";
 import { workflowFile } from "../src/site/links.ts";
-import { buildOgPng, buildShowcaseGif, OG_HEIGHT, OG_WIDTH, SHOWCASE_HEIGHT, SHOWCASE_WIDTH } from "../scripts/showcase.ts";
+import { buildOgPng, buildShowcaseGif, encodePng, OG_HEIGHT, OG_WIDTH, SHOWCASE_HEIGHT, SHOWCASE_WIDTH } from "../scripts/showcase.ts";
 
 const readme = readFileSync("README.md", "utf8");
 const action = readFileSync("action.yml", "utf8");
@@ -77,12 +78,68 @@ test("the showcase GIF is valid, compact, and byte-for-byte what the script rend
   assert.deepEqual(new Uint8Array(gif), buildShowcaseGif(), "docs/showcase.gif is stale; run npm run showcase");
 });
 
-test("the social card is a 1200x630 PNG, byte-for-byte what the script renders", () => {
+function pngContent(bytes: Uint8Array): { ihdr: Buffer; scanlines: Buffer } {
+  const png = Buffer.from(bytes);
+  assert.ok(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), "not a PNG");
+  let ihdr: Buffer | undefined;
+  const idat: Buffer[] = [];
+  for (let offset = 8; offset < png.length;) {
+    assert.ok(offset + 12 <= png.length, "truncated PNG chunk");
+    const length = png.readUInt32BE(offset);
+    const end = offset + 12 + length;
+    assert.ok(end <= png.length, "truncated PNG chunk data");
+    const type = png.toString("ascii", offset + 4, offset + 8);
+    const data = png.subarray(offset + 8, end - 4);
+    if (type === "IHDR") ihdr = data;
+    if (type === "IDAT") idat.push(data);
+    offset = end;
+  }
+  assert.ok(ihdr, "missing IHDR");
+  assert.equal(ihdr.length, 13);
+  assert.ok(idat.length > 0, "missing IDAT");
+  // The encoder uses filter 0, so inflated scanlines compare pixels directly.
+  // Deflate bytes can differ across zlib versions and IDAT chunk boundaries.
+  return { ihdr, scanlines: inflateSync(Buffer.concat(idat)) };
+}
+
+test("the social card is a 1200x630 PNG with the pixels the script renders", () => {
   const png = readFileSync("site/og.png");
   assert.ok(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), "not a PNG");
   assert.equal(png.readUInt32BE(16), OG_WIDTH);
   assert.equal(png.readUInt32BE(20), OG_HEIGHT);
-  assert.deepEqual(new Uint8Array(png), buildOgPng(), "site/og.png is stale; run npm run showcase");
+  assert.deepEqual(pngContent(png), pngContent(buildOgPng()), "site/og.png is stale; run npm run showcase");
+});
+
+test("PNG comparison ignores compression and multiple IDAT chunk boundaries", () => {
+  const original = Buffer.from(encodePng(2, 1, new Uint8Array([1, 2, 3, 255, 4, 5, 6, 255])));
+  const content = pngContent(original);
+  const compressed = deflateSync(content.scanlines, { level: 0 });
+  const chunk = (data: Buffer): Buffer => {
+    const out = Buffer.alloc(data.length + 12);
+    out.writeUInt32BE(data.length, 0);
+    out.write("IDAT", 4);
+    data.copy(out, 8);
+    out.writeUInt32BE(crc32(out.subarray(4, -4)), out.length - 4);
+    return out;
+  };
+  const recompressed = Buffer.concat([
+    original.subarray(0, 33), // signature and IHDR
+    chunk(compressed.subarray(0, 1)), // split even the zlib header across chunks
+    chunk(compressed.subarray(1)),
+    original.subarray(-12), // IEND
+  ]);
+  assert.notDeepEqual(recompressed, original);
+  assert.deepEqual(pngContent(recompressed), content);
+});
+
+test("PNG comparison detects changed pixels and IHDR dimensions", () => {
+  const pixels = new Uint8Array([1, 2, 3, 255, 4, 5, 6, 255]);
+  const original = pngContent(encodePng(2, 1, pixels));
+  assert.notDeepEqual(pngContent(encodePng(1, 2, pixels)).ihdr, original.ihdr);
+  pixels[0]++;
+  const changed = pngContent(encodePng(2, 1, pixels));
+  assert.deepEqual(changed.ihdr, original.ihdr);
+  assert.notDeepEqual(changed.scanlines, original.scanlines);
 });
 
 test("the site declares OpenGraph and Twitter card tags with absolute URLs", () => {
