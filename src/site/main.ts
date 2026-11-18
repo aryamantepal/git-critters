@@ -1,5 +1,5 @@
 import { languageColourway } from "../activity/colourway.ts";
-import { HATCH_AFTER, HATCHLING_POOL } from "../activity/egg.ts";
+import { HATCH_AFTER, poolFor } from "../activity/egg.ts";
 import { hasOtherCreature, OTHER_CREATURE_LEFTOVERS } from "../action/readme.ts";
 import { egg, FRESH_EGG } from "../critters/egg.ts";
 import { findCritter } from "../critters/index.ts";
@@ -171,7 +171,8 @@ function choosePreview(critter: Critter): void {
 function buildPossibleHatchlings(): void {
   hatchlingCards.length = 0;
   possibleHatchlings.replaceChildren();
-  for (const { id } of HATCHLING_POOL) {
+  // Only what a workflow added now can hatch, so a critter waiting on its activation time stays hidden.
+  for (const { id } of poolFor(new Date())) {
     const critter = findCritter(id)!;
     const button = document.createElement("button");
     button.type = "button";
