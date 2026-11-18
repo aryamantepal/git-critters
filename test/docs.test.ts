@@ -62,6 +62,22 @@ test("the preview site has searchable previews without an install-time picker", 
   assert.ok(html.includes('id="added-egg"'), "the confirmation should show the egg");
 });
 
+test("the README shows the animated showcase above the fold, linked to the site", () => {
+  const aboveTheFold = readme.split("## How it works")[0];
+  assert.ok(aboveTheFold.includes('src="docs/showcase.gif"'), "the showcase is missing above the fold");
+  assert.match(aboveTheFold, /<a href="https:\/\/critters\.aryamantepal\.com">\s*<img src="docs\/showcase\.gif"/);
+  assert.ok(existsSync("docs/showcase.gif"));
+});
+
+test("the showcase GIF is valid, compact, and byte-for-byte what the script renders", () => {
+  const gif = readFileSync("docs/showcase.gif");
+  assert.equal(gif.subarray(0, 6).toString("latin1"), "GIF89a");
+  assert.equal(gif.readUInt16LE(6), SHOWCASE_WIDTH);
+  assert.equal(gif.readUInt16LE(8), SHOWCASE_HEIGHT);
+  assert.ok(gif.length < 1024 * 1024, `${gif.length} bytes is over 1 MB`);
+  assert.deepEqual(new Uint8Array(gif), buildShowcaseGif(), "docs/showcase.gif is stale; run npm run showcase");
+});
+
 function pngContent(bytes: Uint8Array): { ihdr: Buffer; scanlines: Buffer } {
   const png = Buffer.from(bytes);
   assert.ok(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), "not a PNG");

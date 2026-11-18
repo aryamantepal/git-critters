@@ -4,6 +4,10 @@ Pixel-art critters for your GitHub profile README. Add an egg in one click and d
 
 **[Add a critter](https://critters.aryamantepal.com)**
 
+<a href="https://critters.aryamantepal.com">
+  <img src="docs/showcase.gif" width="720" alt="A speckled egg and seven pixel-art critters, each in different language colours" />
+</a>
+
 ## How it works
 
 1. On the site, enter your GitHub username. The preview shows the egg with your real README content, in GitHub's light and dark themes.
