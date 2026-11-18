@@ -159,19 +159,20 @@ function crackLevelFor(contributions) {
 function hasHatched(contributions) {
   return contributions >= HATCH_AFTER;
 }
+var POOL_EPOCH = "2026-11-14";
 var HATCHLING_POOL = Object.freeze([
-  "dragon",
-  "axolotl",
-  "jellyfish",
-  "ghost",
-  "robot",
-  "cat",
-  "frog",
-  "mushroom",
-  "turtle",
-  "bat",
-  "penguin",
-  "fox"
+  { id: "dragon", introducedAt: POOL_EPOCH },
+  { id: "axolotl", introducedAt: POOL_EPOCH },
+  { id: "jellyfish", introducedAt: POOL_EPOCH },
+  { id: "ghost", introducedAt: POOL_EPOCH },
+  { id: "robot", introducedAt: POOL_EPOCH },
+  { id: "cat", introducedAt: POOL_EPOCH },
+  { id: "frog", introducedAt: POOL_EPOCH },
+  { id: "mushroom", introducedAt: POOL_EPOCH },
+  { id: "turtle", introducedAt: POOL_EPOCH },
+  { id: "bat", introducedAt: POOL_EPOCH },
+  { id: "penguin", introducedAt: POOL_EPOCH },
+  { id: "fox", introducedAt: POOL_EPOCH }
 ]);
 var LEGACY_SURPRISE_POOL = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
 function hashLogin(login) {
@@ -181,8 +182,16 @@ function hashLogin(login) {
   }
   return hash;
 }
-function hatchlingFor(login) {
-  return HATCHLING_POOL[hashLogin(login) % HATCHLING_POOL.length];
+function poolFor(addedAt, pool = HATCHLING_POOL) {
+  if (!addedAt) return pool;
+  const cutoff = Math.max(addedAt.getTime(), Date.parse(POOL_EPOCH));
+  return pool.filter((entry) => Date.parse(entry.introducedAt) <= cutoff);
+}
+function hatchlingFromPool(pool, login) {
+  return pool[hashLogin(login) % pool.length].id;
+}
+function hatchlingFor(login, addedAt) {
+  return hatchlingFromPool(poolFor(addedAt), login);
 }
 function legacySurpriseFor(login) {
   return LEGACY_SURPRISE_POOL[hashLogin(login) % LEGACY_SURPRISE_POOL.length];
@@ -6114,7 +6123,8 @@ async function workflowAdded(request, env) {
   return oldest ? new Date(oldest.commit.committer.date) : request.now;
 }
 async function readEggContributions(request, env) {
-  return contributionsSince(request, await workflowAdded(request, env));
+  const addedAt = await workflowAdded(request, env);
+  return { sinceAdded: await contributionsSince(request, addedAt), addedAt };
 }
 
 // src/action/keepalive.ts
@@ -6199,7 +6209,7 @@ async function lookUp(login, now, forEgg) {
       console.log(`::warning::GitHub has no user called ${login}, so there's no activity to draw from.`);
       return null;
     }
-    return { look, sinceAdded: forEgg ? await readEggContributions(request, process.env) : 0 };
+    return { look, egg: forEgg ? await readEggContributions(request, process.env) : void 0 };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.log(`::warning::Couldn't read ${login}'s activity from GitHub: ${reason.replace(/\s+/g, " ")}`);
@@ -6263,14 +6273,14 @@ async function main() {
       console.log("Leaving the critter as it was, and trying again at the next run.");
       return;
     }
-    if (eggOn && (!reading || !hasHatched(reading.sinceAdded))) {
+    if (eggOn && (!reading?.egg || !hasHatched(reading.egg.sinceAdded))) {
       const message = `critter: draw the egg for ${yesterday(now)}`;
-      if (reading) {
-        console.log(`Drawing the egg: ${reading.sinceAdded} of ${HATCH_AFTER} contributions.`);
+      if (reading?.egg) {
+        console.log(`Drawing the egg: ${reading.egg.sinceAdded} of ${HATCH_AFTER} contributions.`);
         plan = {
           critter: egg,
           colourway: languageColourway(egg, reading.look.languages),
-          traits: { stage: crackLevelFor(reading.sinceAdded), marks: 0, mood: moodFor(reading.look.activity.days, now) },
+          traits: { stage: crackLevelFor(reading.egg.sinceAdded), marks: 0, mood: moodFor(reading.look.activity.days, now) },
           message,
           added: "Added the egg"
         };
@@ -6279,7 +6289,7 @@ async function main() {
         plan = { critter: egg, colourway: egg.colourways[0].id, traits: FRESH_EGG, message, added: "Added the egg" };
       }
     } else {
-      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login));
+      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login, reading?.egg?.addedAt));
       let colourway = fixed ? colour : critter.colourways[0].id;
       let traits = DEFAULT_TRAITS;
       if (reading) {

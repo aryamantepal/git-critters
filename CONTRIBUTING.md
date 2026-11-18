@@ -84,7 +84,7 @@ A critter defines:
 - **Outline & Contrast**: Outlines must be clearly visible against both light backgrounds (white) and GitHub's dark theme (`#0d1117`), because GIF transparency is binary (no alpha blending).
 - **File Size**: The resulting GIF across all colourways and trait permutations must remain under **1 MB**.
 - **Registering**: Once written, add your critter to the `critters` list in `src/critters/index.ts`.
-- **Egg / Surprise Pool**: New critters are *not* automatically added to `SURPRISE_POOL` in `src/activity/egg.ts` to preserve existing hashes for hatched critters. Maintainers will manage the surprise pool.
+- **Hatchling Pool**: Also append your critter to `HATCHLING_POOL` in `src/activity/egg.ts` as `{ id: "<id>", introducedAt: "<today's date>" }`. Append only — never edit, reorder, or remove an entry, and never change an entry's `introducedAt`. A workflow added before your critter's day keeps hatching from the earlier pool, which is what keeps existing users' critters from ever changing. The four-entry `LEGACY_SURPRISE_POOL` must never change at all, because existing `critter: surprise` workflows still use it.
 
 ---
 

@@ -171,7 +171,7 @@ function choosePreview(critter: Critter): void {
 function buildPossibleHatchlings(): void {
   hatchlingCards.length = 0;
   possibleHatchlings.replaceChildren();
-  for (const id of HATCHLING_POOL) {
+  for (const { id } of HATCHLING_POOL) {
     const critter = findCritter(id)!;
     const button = document.createElement("button");
     button.type = "button";

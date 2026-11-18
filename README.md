@@ -18,7 +18,7 @@ The workflow starts with a speckled egg coloured from your languages. The egg cr
 
 The count starts the day you add the workflow, not from your lifetime total, so everyone starts with an egg. The date comes from the first commit of the workflow file, so there's nothing extra stored in your repo.
 
-There is no species picker. The critter is deterministically chosen from your username, so the same username always receives the same hatchling. Nothing in the workflow, logs, commit messages or image description says which one it is until it hatches.
+There is no species picker. The critter is deterministically chosen from your username, so the same username always receives the same hatchling, and it never changes once hatched. Nothing in the workflow, logs, commit messages or image description says which one it is until it hatches.
 
 There's nothing to sign in to and no server. Everything on the site runs in your browser, and the workflow runs on your repo's own GitHub Actions with its built-in token.
 
@@ -127,7 +127,7 @@ The rules:
 - Every critter must be an original design.
 - Every motion must complete a whole number of cycles over the loop, so the last frame flows into the first.
 - Draw from `Traits` (`stage`, `marks`, `mood`). `DEFAULT_TRAITS` must give the art you'd ship without them. Size is a re-render of the geometry at `STAGE_SCALE`, inside the same frame. Marks reuse colours you already have and are placed on the body, so they move with it and show at every stage. Mood sets whole-number cycles through `cyclesFor`, how far it roams through `roam`, and how long it keeps its eyes shut through `blinkFrames`. Keep the memo in `perTraits`, so only the latest traits are held.
-- A new critter isn't part of automatic hatching until you add it to `HATCHLING_POOL` in `src/activity/egg.ts`. The original four-entry `LEGACY_SURPRISE_POOL` must never change because existing `critter: surprise` workflows still use it; the new no-config flow uses the full current pool.
+- A new critter joins automatic hatching when you append it, with its introduction date, to `HATCHLING_POOL` in `src/activity/egg.ts` (and list it in `src/critters/index.ts`). Append only: a workflow added before your critter's date keeps hatching from the earlier pool, so an existing user's hatchling never changes species. The four-entry `LEGACY_SURPRISE_POOL` must never change because existing `critter: surprise` workflows still use it.
 - Say which colours are `accentColours` (they take the second language's hue), `fixedColours` (they never change), and `edgeColours` (they reach the silhouette), and which one is the `bodyColour`.
 - Outlines have to show on both white and `#0d1117`, since GIF transparency is all or nothing.
 

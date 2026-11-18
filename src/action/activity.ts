@@ -161,7 +161,14 @@ async function workflowAdded(request: ActivityRequest, env: RunEnv): Promise<Dat
   return oldest ? new Date(oldest.commit.committer.date) : request.now;
 }
 
-/** Contributions since the workflow was added, which is what an egg hatches from. */
-export async function readEggContributions(request: ActivityRequest, env: RunEnv): Promise<number> {
-  return contributionsSince(request, await workflowAdded(request, env));
+/** What an egg needs: contributions since the workflow was added, and the day it was added. */
+export interface EggReading {
+  sinceAdded: number;
+  addedAt: Date;
+}
+
+/** Contributions since the workflow was added, which is what an egg hatches from, plus that day. */
+export async function readEggContributions(request: ActivityRequest, env: RunEnv): Promise<EggReading> {
+  const addedAt = await workflowAdded(request, env);
+  return { sinceAdded: await contributionsSince(request, addedAt), addedAt };
 }
