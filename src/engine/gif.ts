@@ -114,6 +114,53 @@ function writeLzw(out: ByteWriter, pixels: Uint8Array, minCodeSize: number): voi
   out.byte(0);
 }
 
+/**
+ * Encode whole frames of palette indexes as a looping GIF with one shared palette.
+ * Index 0 is transparent. Used for composite images like the README showcase.
+ */
+export function encodeGifFrames(
+  width: number,
+  height: number,
+  palette: Uint8Array,
+  frames: readonly Uint8Array[],
+  delayMs: number,
+): Uint8Array {
+  const colours = palette.length / 3;
+  let tableBits = 2;
+  while (1 << tableBits < colours) tableBits++;
+
+  const out = new ByteWriter();
+  out.text("GIF89a");
+  out.word(width);
+  out.word(height);
+  out.byte(0x80 | (tableBits - 1)); // has a global colour table
+  out.byte(TRANSPARENT); // background colour index
+  out.byte(0);
+  out.bytes(palette);
+  out.bytes(new Uint8Array((1 << tableBits) * 3 - palette.length));
+
+  // Loop forever.
+  out.bytes([0x21, 0xff, 0x0b]);
+  out.text("NETSCAPE2.0");
+  out.bytes([0x03, 0x01, 0x00, 0x00, 0x00]);
+
+  const delay = Math.max(2, Math.round(delayMs / 10));
+  for (const pixels of frames) {
+    out.bytes([0x21, 0xf9, 0x04, (2 << 2) | 1]); // restore to background, has transparency
+    out.word(delay);
+    out.bytes([TRANSPARENT, 0x00]);
+    out.byte(0x2c);
+    out.word(0);
+    out.word(0);
+    out.word(width);
+    out.word(height);
+    out.byte(0); // no local colour table
+    writeLzw(out, pixels, tableBits);
+  }
+  out.byte(0x3b);
+  return out.result();
+}
+
 /** Encode a critter as a looping GIF that clears every frame, so nothing trails behind. */
 export function encodeGif(
   critter: Critter,
