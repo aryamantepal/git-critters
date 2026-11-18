@@ -56,7 +56,7 @@ on:
     paths: [.github/workflows/critter.yml]
   workflow_dispatch:
   schedule:
-    - cron: "37 0 * * *" # just after midnight UTC, when yesterday's activity is complete
+    - cron: "37 0 * * *" # after midnight UTC, when yesterday's activity is complete
 
 permissions:
   contents: write
