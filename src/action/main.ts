@@ -12,7 +12,7 @@ import { encodeGif } from "../engine/gif.ts";
 import { DEFAULT_TRAITS } from "../engine/traits.ts";
 import type { Traits } from "../engine/traits.ts";
 import { readActivity, readEggContributions } from "./activity.ts";
-import type { Look } from "./activity.ts";
+import type { EggReading, Look } from "./activity.ts";
 import { KEEP_ALIVE_MESSAGE, needsKeepAlive } from "./keepalive.ts";
 import { critterBlock, hasOtherCreature, OTHER_CREATURE_LEFTOVERS, withCritterBlock } from "./readme.ts";
 
@@ -45,8 +45,8 @@ function useBotIdentity(): void {
 
 interface Reading {
   look: Look;
-  /** Contributions since the workflow was added. Only read for an egg. */
-  sinceAdded: number;
+  /** Egg progress: contributions since the workflow was added, and when it was added. Only read for an egg. */
+  egg?: EggReading;
 }
 
 /** Read what the critter is drawn from. A failure is a warning, never a failed run. */
@@ -58,7 +58,7 @@ async function lookUp(login: string, now: Date, forEgg: boolean): Promise<Readin
       console.log(`::warning::GitHub has no user called ${login}, so there's no activity to draw from.`);
       return null;
     }
-    return { look, sinceAdded: forEgg ? await readEggContributions(request, process.env) : 0 };
+    return { look, egg: forEgg ? await readEggContributions(request, process.env) : undefined };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.log(`::warning::Couldn't read ${login}'s activity from GitHub: ${reason.replace(/\s+/g, " ")}`);
@@ -143,15 +143,15 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (eggOn && (!reading || !hasHatched(reading.sinceAdded))) {
+    if (eggOn && (!reading?.egg || !hasHatched(reading.egg.sinceAdded))) {
       // Nothing here may name the hatchling, so it isn't worked out until it has hatched.
       const message = `critter: draw the egg for ${yesterday(now)}`;
-      if (reading) {
-        console.log(`Drawing the egg: ${reading.sinceAdded} of ${HATCH_AFTER} contributions.`);
+      if (reading?.egg) {
+        console.log(`Drawing the egg: ${reading.egg.sinceAdded} of ${HATCH_AFTER} contributions.`);
         plan = {
           critter: egg,
           colourway: languageColourway(egg, reading.look.languages),
-          traits: { stage: crackLevelFor(reading.sinceAdded), marks: 0, mood: moodFor(reading.look.activity.days, now) },
+          traits: { stage: crackLevelFor(reading.egg.sinceAdded), marks: 0, mood: moodFor(reading.look.activity.days, now) },
           message,
           added: "Added the egg",
         };
@@ -160,7 +160,8 @@ async function main(): Promise<void> {
         plan = { critter: egg, colourway: egg.colourways[0].id, traits: FRESH_EGG, message, added: "Added the egg" };
       }
     } else {
-      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login))!;
+      // The workflow's age picks the pool epoch, so a hatched critter never changes species later.
+      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login, reading?.egg?.poolDate))!;
       let colourway: string | Colourway = fixed ? colour : critter.colourways[0].id;
       let traits: Traits = DEFAULT_TRAITS;
       if (reading) {

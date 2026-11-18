@@ -2,6 +2,7 @@
 import { topLanguages } from "../activity/languages.ts";
 import type { RepoLanguage } from "../activity/languages.ts";
 import type { Activity, ContributionDay } from "../activity/traits.ts";
+import { POOL_EPOCH } from "../activity/egg.ts";
 import { WORKFLOW_PATH } from "../site/links.ts";
 
 const API = "https://api.github.com";
@@ -136,7 +137,7 @@ export async function readActivity(request: ActivityRequest): Promise<Look | nul
 export type RunEnv = Readonly<Record<string, string | undefined>>;
 
 interface Commit {
-  commit: { committer: { date: string } };
+  commit: { author?: { date: string } | null; committer: { date: string } };
 }
 
 async function listCommits(request: ActivityRequest, url: string): Promise<{ commits: Commit[]; link: string }> {
@@ -147,8 +148,11 @@ async function listCommits(request: ActivityRequest, url: string): Promise<{ com
   return { commits: (await response.json()) as Commit[], link: response.headers.get("link") ?? "" };
 }
 
-/** When the workflow file was first committed. No commits at all means it was added just now. */
-async function workflowAdded(request: ActivityRequest, env: RunEnv): Promise<Date> {
+/**
+ * When the workflow file was first committed, by author date, which a rebase or amend keeps.
+ * Undefined when no commit touches the path (a renamed file or rewritten history).
+ */
+async function workflowAdded(request: ActivityRequest, env: RunEnv): Promise<Date | undefined> {
   const repo = env.GITHUB_REPOSITORY;
   if (!repo) throw new Error("GITHUB_REPOSITORY isn't set");
   // GITHUB_WORKFLOW_REF looks like owner/repo/.github/workflows/critter.yml@refs/heads/main
@@ -158,10 +162,24 @@ async function workflowAdded(request: ActivityRequest, env: RunEnv): Promise<Dat
   // One commit a page, newest first, so the last page holds the oldest. A single commit has no link.
   const last = /<([^>]+)>;\s*rel="last"/.exec(newest.link)?.[1];
   const oldest = last ? (await listCommits(request, last)).commits[0] : newest.commits[0];
-  return oldest ? new Date(oldest.commit.committer.date) : request.now;
+  return oldest ? new Date(oldest.commit.author?.date ?? oldest.commit.committer.date) : undefined;
 }
 
-/** Contributions since the workflow was added, which is what an egg hatches from. */
-export async function readEggContributions(request: ActivityRequest, env: RunEnv): Promise<number> {
-  return contributionsSince(request, await workflowAdded(request, env));
+/** What an egg needs: contributions since the workflow was added, and the day it was added. */
+export interface EggReading {
+  sinceAdded: number;
+  /** When contributions start counting. With no commit history, the current run. */
+  addedAt: Date;
+  /**
+   * The date that picks the hatchling pool. With no commit history this is the pool epoch,
+   * never the current run, so later critters can't join the pool and change the species.
+   */
+  poolDate: Date;
+}
+
+/** Contributions since the workflow was added, which is what an egg hatches from, plus that day. */
+export async function readEggContributions(request: ActivityRequest, env: RunEnv): Promise<EggReading> {
+  const found = await workflowAdded(request, env);
+  const addedAt = found ?? request.now;
+  return { sinceAdded: await contributionsSince(request, addedAt), addedAt, poolDate: found ?? new Date(POOL_EPOCH) };
 }

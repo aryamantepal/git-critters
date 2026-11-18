@@ -7,8 +7,11 @@ import {
   HATCH_AFTER,
   HATCHLING_POOL,
   hatchlingFor,
+  hatchlingFromPool,
   LEGACY_SURPRISE_POOL,
   legacySurpriseFor,
+  POOL_EPOCH,
+  poolFor,
 } from "../src/activity/egg.ts";
 import { egg } from "../src/critters/egg.ts";
 import { critters } from "../src/critters/index.ts";
@@ -58,14 +61,76 @@ describe("the automatic hatchling", () => {
   });
 
   test("can be any current critter, and the pool is frozen", () => {
-    assert.deepEqual([...HATCHLING_POOL], critters.map((critter) => critter.id));
+    assert.deepEqual(HATCHLING_POOL.map((entry) => entry.id), critters.map((critter) => critter.id));
     assert.ok(Object.isFrozen(HATCHLING_POOL));
     const reached = new Set(Array.from({ length: 1000 }, (_, n) => hatchlingFor(`user-${n}`)));
-    assert.deepEqual([...reached].sort(), [...HATCHLING_POOL].sort());
+    assert.deepEqual([...reached].sort(), HATCHLING_POOL.map((entry) => entry.id).sort());
   });
 
   test("only names critters the Action can draw", () => {
-    for (const id of HATCHLING_POOL) assert.ok(critters.some((c) => c.id === id), id);
+    for (const { id } of HATCHLING_POOL) assert.ok(critters.some((c) => c.id === id), id);
+  });
+
+  test("every entry has a unique id and a real UTC activation timestamp from the original epoch", () => {
+    const ids = HATCHLING_POOL.map((entry) => entry.id);
+    assert.equal(new Set(ids).size, ids.length);
+    for (const entry of HATCHLING_POOL) {
+      assert.match(entry.introducedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/, entry.id);
+      assert.ok(!Number.isNaN(Date.parse(entry.introducedAt)), entry.id);
+      // No entry may predate the epoch, and the original pool is locked to that day.
+      assert.ok(Date.parse(entry.introducedAt) >= Date.parse(POOL_EPOCH), entry.id);
+      if (HATCHLING_POOL.indexOf(entry) < 10) assert.equal(entry.introducedAt, POOL_EPOCH, entry.id);
+    }
+  });
+
+  test("penguin and fox join at the moment v1 shipped them, not at the epoch", () => {
+    const ten = HATCHLING_POOL.slice(0, 10);
+    assert.deepEqual(poolFor(new Date("2026-11-16T22:46:06Z")), ten);
+    assert.deepEqual(poolFor(new Date("2026-11-16T22:46:07Z")), HATCHLING_POOL);
+  });
+});
+
+describe("pool epochs", () => {
+  const FUTURE = "2030-06-01T12:00:00Z";
+  const extended = [...HATCHLING_POOL, { id: "unicorn", introducedAt: FUTURE }] as const;
+  const beforeFuture = new Date("2026-11-20T00:00:00Z");
+  const afterFuture = new Date(FUTURE);
+
+  test("no date sees the whole pool, and the epoch and anything earlier see the original ten", () => {
+    const ten = HATCHLING_POOL.slice(0, 10);
+    assert.deepEqual(poolFor(undefined), HATCHLING_POOL);
+    assert.deepEqual(poolFor(new Date(POOL_EPOCH)), ten);
+    assert.deepEqual(poolFor(beforeFuture), HATCHLING_POOL);
+    // Before the epoch the original pool is still the fallback.
+    assert.deepEqual(poolFor(new Date("2020-01-01T00:00:00Z")), ten);
+  });
+
+  test("appending a future critter never changes an earlier workflow's hatchling", () => {
+    assert.deepEqual(poolFor(beforeFuture, extended), HATCHLING_POOL);
+    for (let n = 0; n < 1000; n++) {
+      const login = `user-${n}`;
+      assert.equal(hatchlingFromPool(poolFor(beforeFuture, extended), login), hatchlingFor(login, beforeFuture), login);
+      assert.equal(hatchlingFor(login, beforeFuture), hatchlingFor(login), login);
+      assert.equal(hatchlingFor(login.toUpperCase(), beforeFuture), hatchlingFor(login, beforeFuture), login);
+    }
+  });
+
+  test("same-day installs before activation keep their original hatchling", () => {
+    for (const instant of ["2030-06-01T08:00:00Z", "2030-06-01T11:59:59.999Z"]) {
+      const installed = new Date(instant);
+      assert.deepEqual(poolFor(installed, extended), HATCHLING_POOL);
+      assert.equal(hatchlingFromPool(poolFor(installed, extended), "sam"), hatchlingFor("sam", installed));
+    }
+  });
+
+  test("a workflow added at a critter's activation time can hatch it", () => {
+    assert.equal(poolFor(afterFuture, extended).length, HATCHLING_POOL.length + 1);
+    const reached = new Set(Array.from({ length: 1000 }, (_, n) => hatchlingFromPool(poolFor(afterFuture, extended), `user-${n}`)));
+    assert.ok(reached.has("unicorn"));
+    // And the mapping is still deterministic per login, whatever its case.
+    for (const login of ["octocat", "aryamantepal", "Zoe-9"]) {
+      assert.equal(hatchlingFromPool(poolFor(afterFuture, extended), login), hatchlingFromPool(poolFor(afterFuture, extended), login.toUpperCase()));
+    }
   });
 });
 
@@ -161,7 +226,9 @@ describe("when the workflow was added", () => {
         ? { body: commit("2025-12-20T09:30:00Z") }
         : { body: commit("2026-10-01T00:00:00Z"), link: '<https://api.github.com/x?page=7>; rel="last"' },
     );
-    assert.equal(await read(impl), 8);
+    const reading = await read(impl);
+    assert.equal(reading.sinceAdded, 8);
+    assert.deepEqual(reading.addedAt, new Date("2025-12-20T09:30:00Z"));
     assert.deepEqual(windowsOf(calls), [
       ["y2025", "2025-12-20T09:30:00.000Z", "2025-12-31T23:59:59Z"],
       ["y2026", "2026-01-01T00:00:00Z", "2026-11-06T00:37:12.000Z"],
@@ -170,14 +237,27 @@ describe("when the workflow was added", () => {
 
   test("a single commit has no link, and is the one", async () => {
     const { impl, calls } = fakeFetch(() => ({ body: commit("2026-11-02T10:00:00Z") }));
-    assert.equal(await read(impl), 4);
+    const reading = await read(impl);
+    assert.equal(reading.sinceAdded, 4);
+    assert.deepEqual(reading.addedAt, new Date("2026-11-02T10:00:00Z"));
     assert.deepEqual(windowsOf(calls), [["y2026", "2026-11-02T10:00:00.000Z", "2026-11-06T00:37:12.000Z"]]);
   });
 
-  test("no commits means it was added just now", async () => {
+  test("no commits means contributions count from now, but the pool stays at the epoch", async () => {
     const { impl, calls } = fakeFetch(() => ({ body: [] }));
-    await read(impl);
+    const reading = await read(impl);
+    assert.deepEqual(reading.addedAt, NOW);
+    assert.deepEqual(reading.poolDate, new Date(POOL_EPOCH));
     assert.deepEqual(windowsOf(calls), [["y2026", NOW.toISOString(), NOW.toISOString()]]);
+  });
+
+  test("uses the author date, which survives a rebase that moves the committer date", async () => {
+    const { impl } = fakeFetch(() => ({
+      body: [{ commit: { author: { date: "2026-11-02T10:00:00Z" }, committer: { date: "2026-11-05T12:00:00Z" } } }],
+    }));
+    const reading = await read(impl);
+    assert.deepEqual(reading.addedAt, new Date("2026-11-02T10:00:00Z"));
+    assert.deepEqual(reading.poolDate, new Date("2026-11-02T10:00:00Z"));
   });
 
   test("falls back to the usual workflow path when there's no GITHUB_WORKFLOW_REF", async () => {
