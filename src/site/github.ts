@@ -94,7 +94,7 @@ function readCachedProfile(key: string, storage: ProfileStorage | null, now: num
     const raw = storage.getItem(key);
     if (!raw) return null;
     const cached = JSON.parse(raw) as { at: number; profile: Profile };
-    if (cached.profile.kind === "unknown" || now - cached.at > PROFILE_CACHE_TTL_MS) return null;
+    if (cached.profile.kind === "unknown" || cached.profile.kind === "no-repo" || now - cached.at > PROFILE_CACHE_TTL_MS) return null;
     return cached.profile;
   } catch {
     return null;
@@ -102,7 +102,8 @@ function readCachedProfile(key: string, storage: ProfileStorage | null, now: num
 }
 
 function writeCachedProfile(key: string, profile: Profile, storage: ProfileStorage | null, now: number): void {
-  if (!storage || profile.kind === "unknown") return;
+  // A profile repo may be created before the visitor's next focus or Enter refresh.
+  if (!storage || profile.kind === "unknown" || profile.kind === "no-repo") return;
   try {
     storage.setItem(key, JSON.stringify({ at: now, profile }));
   } catch {
