@@ -102,7 +102,7 @@ describe("site username lookups", () => {
 
 describe("the lookup cache", () => {
   test("a missing repo is not cached and the next lookup finds the newly created repo", async () => {
-    const routes = happyRoutes();
+    const routes = happyRoutes(true);
     delete (routes as Record<string, unknown>)["/repos/sam/sam"];
     const { impl, calls } = fakeFetch(routes);
     const storage = fakeStorage();
@@ -120,7 +120,7 @@ describe("the lookup cache", () => {
   });
 
   test("an unexpired no-repo entry from an older version is ignored", async () => {
-    const { impl, calls } = fakeFetch(happyRoutes());
+    const { impl, calls } = fakeFetch(happyRoutes(true));
     const storage = fakeStorage();
     storage.setItem("git-critters:profile:sam", JSON.stringify({
       at: 1_000_000,
@@ -136,7 +136,7 @@ describe("the lookup cache", () => {
   });
 
   test("a repeated lookup within the TTL makes no requests and is keyed case-insensitively", async () => {
-    const { impl, calls } = fakeFetch(happyRoutes());
+    const { impl, calls } = fakeFetch(happyRoutes(true));
     const storage = fakeStorage();
     let now = 1_000_000;
     const options = { fetchImpl: impl, storage, now: () => now };
@@ -149,6 +149,19 @@ describe("the lookup cache", () => {
     now += 4 * 60 * 1000;
     await lookUpProfile("sam", options);
     assert.equal(calls.length, afterFirst, "still inside the TTL");
+  });
+
+  test("a profile without the workflow is not cached, so an install in another tab shows up", async () => {
+    const routes = happyRoutes(false);
+    const { impl } = fakeFetch(routes);
+    const storage = fakeStorage();
+    const options = { fetchImpl: impl, storage, now: () => 1_000_000 };
+    const first = await lookUpProfile("sam", options);
+    assert.ok(first.kind === "ready" && !first.installed);
+    assert.equal(storage.map.size, 0);
+    routes["/repos/sam/sam/contents/.github/workflows/critter.yml"] = { body: {} };
+    const second = await lookUpProfile("sam", options);
+    assert.ok(second.kind === "ready" && second.installed);
   });
 
   test("a cached profile expires after the TTL, and bypassCache skips the cache", async () => {
