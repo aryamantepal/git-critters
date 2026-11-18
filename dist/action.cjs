@@ -6021,6 +6021,7 @@ function encodeGif(critter, colourway, traits = DEFAULT_TRAITS) {
 
 // src/site/links.ts
 var WORKFLOW_PATH = ".github/workflows/critter.yml";
+var SITE_URL = "https://critters.aryamantepal.com";
 
 // src/action/activity.ts
 var API = "https://api.github.com";
@@ -6149,9 +6150,11 @@ function critterBlock(gifPath) {
   return [
     START,
     '<p align="center">',
-    `  <img src="${escapeAttribute(gifPath)}" width="${README_CRITTER_WIDTH}" alt="${README_CRITTER_ALT}" />`,
+    `  <a href="${SITE_URL}">`,
+    `    <img src="${escapeAttribute(gifPath)}" width="${README_CRITTER_WIDTH}" alt="${README_CRITTER_ALT}" />`,
+    "  </a>",
     "  <br />",
-    `  <sub>Made with <a href="${KIT_URL}">git-critters</a></sub>`,
+    `  <sub>Made with <a href="${KIT_URL}">git-critters</a> | <a href="${SITE_URL}">Hatch your own</a></sub>`,
     "</p>",
     END
   ].join("\n");
