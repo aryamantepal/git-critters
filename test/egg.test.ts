@@ -71,10 +71,11 @@ describe("the automatic hatchling", () => {
     for (const { id } of HATCHLING_POOL) assert.ok(critters.some((c) => c.id === id), id);
   });
 
-  test("every entry has a unique id and a real introduction day from the original epoch", () => {
+  test("every entry has a unique id and a real UTC activation timestamp from the original epoch", () => {
     const ids = HATCHLING_POOL.map((entry) => entry.id);
     assert.equal(new Set(ids).size, ids.length);
     for (const entry of HATCHLING_POOL) {
+      assert.match(entry.introducedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/, entry.id);
       assert.ok(!Number.isNaN(Date.parse(entry.introducedAt)), entry.id);
       // No entry may predate the epoch, and the original pool is locked to that day.
       assert.ok(Date.parse(entry.introducedAt) >= Date.parse(POOL_EPOCH), entry.id);
@@ -84,10 +85,10 @@ describe("the automatic hatchling", () => {
 });
 
 describe("pool epochs", () => {
-  const FUTURE = "2030-06-01";
+  const FUTURE = "2030-06-01T12:00:00Z";
   const extended = [...HATCHLING_POOL, { id: "unicorn", introducedAt: FUTURE }] as const;
   const beforeFuture = new Date("2026-11-20T00:00:00Z");
-  const afterFuture = new Date(`${FUTURE}T12:00:00Z`);
+  const afterFuture = new Date(FUTURE);
 
   test("no date sees the whole pool, and any date from the epoch on sees the original pool", () => {
     assert.deepEqual(poolFor(undefined), HATCHLING_POOL);
@@ -107,7 +108,15 @@ describe("pool epochs", () => {
     }
   });
 
-  test("a workflow added after a critter's day can hatch it", () => {
+  test("same-day installs before activation keep their original hatchling", () => {
+    for (const instant of ["2030-06-01T08:00:00Z", "2030-06-01T11:59:59.999Z"]) {
+      const installed = new Date(instant);
+      assert.deepEqual(poolFor(installed, extended), HATCHLING_POOL);
+      assert.equal(hatchlingFromPool(poolFor(installed, extended), "sam"), hatchlingFor("sam", installed));
+    }
+  });
+
+  test("a workflow added at a critter's activation time can hatch it", () => {
     assert.equal(poolFor(afterFuture, extended).length, HATCHLING_POOL.length + 1);
     const reached = new Set(Array.from({ length: 1000 }, (_, n) => hatchlingFromPool(poolFor(afterFuture, extended), `user-${n}`)));
     assert.ok(reached.has("unicorn"));
