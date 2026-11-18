@@ -161,6 +161,7 @@ function hasHatched(contributions) {
 }
 var POOL_EPOCH = "2026-11-14T00:00:00Z";
 var HATCHLING_POOL = Object.freeze([
+  // penguin and fox reached the v1 tag at 2026-11-16T22:46:07Z. Before that, v1 hatched from the first ten.
   { id: "dragon", introducedAt: POOL_EPOCH },
   { id: "axolotl", introducedAt: POOL_EPOCH },
   { id: "jellyfish", introducedAt: POOL_EPOCH },
@@ -171,8 +172,8 @@ var HATCHLING_POOL = Object.freeze([
   { id: "mushroom", introducedAt: POOL_EPOCH },
   { id: "turtle", introducedAt: POOL_EPOCH },
   { id: "bat", introducedAt: POOL_EPOCH },
-  { id: "penguin", introducedAt: POOL_EPOCH },
-  { id: "fox", introducedAt: POOL_EPOCH }
+  { id: "penguin", introducedAt: "2026-11-16T22:46:07Z" },
+  { id: "fox", introducedAt: "2026-11-16T22:46:07Z" }
 ]);
 var LEGACY_SURPRISE_POOL = Object.freeze(["dragon", "axolotl", "jellyfish", "ghost"]);
 function hashLogin(login) {
@@ -6121,11 +6122,12 @@ async function workflowAdded(request, env) {
   const newest = await listCommits(request, `${API}/repos/${repo}/commits?path=${encodeURIComponent(path)}&per_page=1`);
   const last = /<([^>]+)>;\s*rel="last"/.exec(newest.link)?.[1];
   const oldest = last ? (await listCommits(request, last)).commits[0] : newest.commits[0];
-  return oldest ? new Date(oldest.commit.committer.date) : request.now;
+  return oldest ? new Date(oldest.commit.author?.date ?? oldest.commit.committer.date) : void 0;
 }
 async function readEggContributions(request, env) {
-  const addedAt = await workflowAdded(request, env);
-  return { sinceAdded: await contributionsSince(request, addedAt), addedAt };
+  const found = await workflowAdded(request, env);
+  const addedAt = found ?? request.now;
+  return { sinceAdded: await contributionsSince(request, addedAt), addedAt, poolDate: found ?? new Date(POOL_EPOCH) };
 }
 
 // src/action/asset.ts
@@ -6347,7 +6349,7 @@ async function main() {
         plan = { critter: egg, colourway: egg.colourways[0].id, traits: FRESH_EGG, message, added: "Added the egg" };
       }
     } else {
-      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login, reading?.egg?.addedAt));
+      const critter = picked ?? findCritter(legacySurprise ? legacySurpriseFor(login) : hatchlingFor(login, reading?.egg?.poolDate));
       let colourway = fixed ? colour : critter.colourways[0].id;
       let traits = DEFAULT_TRAITS;
       if (reading) {
