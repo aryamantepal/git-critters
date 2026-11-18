@@ -94,16 +94,25 @@ function readCachedProfile(key: string, storage: ProfileStorage | null, now: num
     const raw = storage.getItem(key);
     if (!raw) return null;
     const cached = JSON.parse(raw) as { at: number; profile: Profile };
-    if (cached.profile.kind === "unknown" || cached.profile.kind === "no-repo" || now - cached.at > PROFILE_CACHE_TTL_MS) return null;
+    // Checked here too, since an older version of the site cached what it no longer does.
+    if (!isCacheable(cached.profile) || now - cached.at > PROFILE_CACHE_TTL_MS) return null;
     return cached.profile;
   } catch {
     return null;
   }
 }
 
+/**
+ * Only answers unlikely to change soon are cached. A missing profile repo or workflow may be
+ * added in another tab at any moment, so those are always looked up again.
+ */
+function isCacheable(profile: Profile): boolean {
+  if (profile.kind === "unknown" || profile.kind === "no-repo") return false;
+  return profile.kind !== "ready" || profile.installed;
+}
+
 function writeCachedProfile(key: string, profile: Profile, storage: ProfileStorage | null, now: number): void {
-  // A profile repo may be created before the visitor's next focus or Enter refresh.
-  if (!storage || profile.kind === "unknown" || profile.kind === "no-repo") return;
+  if (!storage || !isCacheable(profile)) return;
   try {
     storage.setItem(key, JSON.stringify({ at: now, profile }));
   } catch {
