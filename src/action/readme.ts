@@ -49,6 +49,21 @@ export const OTHER_CREATURE_LEFTOVERS =
   "This takes the place of your git-koi koi. Its workflow will keep redrawing a GIF nobody sees, so delete .github/workflows/koi.yml and the koi folder.";
 
 /**
+ * Point an existing marked block's image at another URL, for when the GIF moves to an
+ * asset branch: a relative src would resolve against the default branch and break.
+ * Everything else in the block stays byte for byte.
+ */
+export function retargetCritterSrc(readme: string, from: string, to: string): string {
+  const start = readme.indexOf(START);
+  const end = readme.indexOf(END);
+  if (start === -1 || end <= start) return readme;
+  const before = `src="${escapeAttribute(from)}"`;
+  const block = readme.slice(start, end);
+  if (!block.includes(before)) return readme;
+  return readme.slice(0, start) + block.split(before).join(`src="${escapeAttribute(to)}"`) + readme.slice(end);
+}
+
+/**
  * Once a marked block exists, it belongs to the user and is preserved byte for byte.
  * On first setup, take the spot of another creature like git-koi's, or otherwise
  * put the starter block at the top of the README.

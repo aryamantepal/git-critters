@@ -2,7 +2,7 @@
 
 // src/action/main.ts
 var import_node_child_process = require("node:child_process");
-var import_node_fs = require("node:fs");
+var import_node_fs2 = require("node:fs");
 var import_node_path = require("node:path");
 
 // src/engine/contrast.ts
@@ -6128,6 +6128,31 @@ async function readEggContributions(request, env) {
   return { sinceAdded: await contributionsSince(request, addedAt), addedAt };
 }
 
+// src/action/asset.ts
+var import_node_fs = require("node:fs");
+function assetRawUrl(repository, branch, gifPath) {
+  const path = gifPath.split("/").map(encodeURIComponent).join("/");
+  return `https://raw.githubusercontent.com/${repository}/${branch}/${path}`;
+}
+function pushAssetBranch(push, run) {
+  const remote = push.remote ?? "origin";
+  const index = ".git/git-critters-asset.index";
+  const day = new Date(Date.UTC(push.date.getUTCFullYear(), push.date.getUTCMonth(), push.date.getUTCDate()));
+  const stamp = day.toISOString();
+  const env = { GIT_INDEX_FILE: index };
+  (0, import_node_fs.rmSync)(index, { force: true });
+  try {
+    run(["read-tree", "--empty"], env);
+    run(["add", "--force", "--", push.gifPath], env);
+    const tree = run(["write-tree"], env).trim();
+    const commit = run(["commit-tree", tree, "-m", push.message], { ...env, GIT_AUTHOR_DATE: stamp, GIT_COMMITTER_DATE: stamp }).trim();
+    run(["push", "--force", remote, `${commit}:refs/heads/${push.branch}`]);
+    return commit;
+  } finally {
+    (0, import_node_fs.rmSync)(index, { force: true });
+  }
+}
+
 // src/action/keepalive.ts
 var KEEP_ALIVE_AFTER_DAYS = 50;
 var KEEP_ALIVE_MESSAGE = "critter: keep the nightly run active";
@@ -6171,6 +6196,15 @@ function hasOtherCreature(readme) {
   return !(readme.includes(START) && readme.includes(END)) && otherCreature(readme) !== null;
 }
 var OTHER_CREATURE_LEFTOVERS = "This takes the place of your git-koi koi. Its workflow will keep redrawing a GIF nobody sees, so delete .github/workflows/koi.yml and the koi folder.";
+function retargetCritterSrc(readme, from, to) {
+  const start = readme.indexOf(START);
+  const end = readme.indexOf(END);
+  if (start === -1 || end <= start) return readme;
+  const before = `src="${escapeAttribute(from)}"`;
+  const block = readme.slice(start, end);
+  if (!block.includes(before)) return readme;
+  return readme.slice(0, start) + block.split(before).join(`src="${escapeAttribute(to)}"`) + readme.slice(end);
+}
 function withCritterBlock(readme, block) {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
@@ -6199,6 +6233,12 @@ function flag(name) {
 }
 function git(...args) {
   return (0, import_node_child_process.execFileSync)("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+}
+function gitEnv(env, ...args) {
+  return (0, import_node_child_process.execFileSync)("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, ...env } });
+}
+function gitRunner(args, env) {
+  return env ? gitEnv(env, ...args) : git(...args);
 }
 function useBotIdentity() {
   git("config", "user.name", "github-actions[bot]");
@@ -6254,8 +6294,23 @@ async function main() {
   if (gifPath.startsWith("/") || gifPath.split("/").includes("..")) {
     fail(`output must be a path inside the repository, not "${gifPath}".`);
   }
-  const readmeName = (0, import_node_fs.readdirSync)(".").find((name) => /^readme(\.md)?$/i.test(name)) ?? "README.md";
-  const readme = (0, import_node_fs.existsSync)(readmeName) ? (0, import_node_fs.readFileSync)(readmeName, "utf8") : "";
+  const assetBranch = input("branch");
+  if (assetBranch) {
+    let valid = true;
+    try {
+      git("check-ref-format", "--branch", assetBranch);
+    } catch {
+      valid = false;
+    }
+    if (!valid) fail(`branch must be a valid branch name, not "${assetBranch}".`);
+    const current = process.env.GITHUB_REF_NAME ?? git("branch", "--show-current").trim();
+    if (assetBranch === current) {
+      fail(`branch must not be the current branch "${current}", where the README commit still goes.`);
+    }
+    if (!process.env.GITHUB_REPOSITORY) fail("branch needs GITHUB_REPOSITORY to build the image URL.");
+  }
+  const readmeName = (0, import_node_fs2.readdirSync)(".").find((name) => /^readme(\.md)?$/i.test(name)) ?? "README.md";
+  const readme = (0, import_node_fs2.existsSync)(readmeName) ? (0, import_node_fs2.readFileSync)(readmeName, "utf8") : "";
   const now = /* @__PURE__ */ new Date();
   let plan;
   if (!activity) {
@@ -6272,7 +6327,7 @@ async function main() {
     const login = input("login");
     if (!login) fail("login is empty, so there's no one to draw the critter for.");
     const reading = await lookUp(login, now, eggOn);
-    if (!reading && (0, import_node_fs.existsSync)(gifPath)) {
+    if (!reading && (0, import_node_fs2.existsSync)(gifPath)) {
       console.log("Leaving the critter as it was, and trying again at the next run.");
       return;
     }
@@ -6313,12 +6368,33 @@ async function main() {
       };
     }
   }
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(gifPath), { recursive: true });
-  (0, import_node_fs.writeFileSync)(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
-  const nextReadme = withCritterBlock(readme, critterBlock(gifPath));
+  (0, import_node_fs2.mkdirSync)((0, import_node_path.dirname)(gifPath), { recursive: true });
+  (0, import_node_fs2.writeFileSync)(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
+  const blockSrc = assetBranch ? assetRawUrl(process.env.GITHUB_REPOSITORY, assetBranch, gifPath) : gifPath;
+  const nextReadme = withCritterBlock(assetBranch ? retargetCritterSrc(readme, gifPath, blockSrc) : readme, critterBlock(blockSrc));
   const readmeChanged = nextReadme !== readme;
-  if (readmeChanged) (0, import_node_fs.writeFileSync)(readmeName, nextReadme);
+  if (readmeChanged) (0, import_node_fs2.writeFileSync)(readmeName, nextReadme);
   if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
+  if (assetBranch) {
+    if (readmeChanged) {
+      git("add", "--force", "--", readmeName);
+      useBotIdentity();
+      git("commit", "--quiet", "--message", plan.message);
+      git("push", "--quiet");
+      console.log(`${plan.added} to ${readmeName}.`);
+    } else {
+      console.log("The README is already up to date, so the default branch gets no commit.");
+    }
+    pushAssetBranch({ gifPath, branch: assetBranch, message: plan.message, date: now }, gitRunner);
+    console.log(`${gifPath} now sits on ${assetBranch} as a single commit.`);
+    if (activity && needsKeepAlive(new Date(git("log", "-1", "--format=%cI").trim()), now)) {
+      useBotIdentity();
+      git("commit", "--quiet", "--allow-empty", "--message", KEEP_ALIVE_MESSAGE);
+      git("push", "--quiet");
+      console.log("The last commit is getting old, so this made an empty one to keep the nightly run active.");
+    }
+    return;
+  }
   git("add", "--force", "--", gifPath, ...readmeChanged ? [readmeName] : []);
   if (git("diff", "--cached", "--name-only").trim() === "") {
     console.log("The critter is already up to date, so there's nothing to commit.");

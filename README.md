@@ -118,7 +118,7 @@ To remove git-critters, delete the workflow, `critter.gif`, and the block betwee
 
 **To keep one fixed critter**, set `activity: false` (or remove the line) and delete the `schedule:` lines. Then it draws once, exactly as it always has, and `colour` has to be one from the table.
 
-The workflow also takes `output`, the path to save the GIF to, which defaults to `critter.gif`, and `login` and `token`, which default to the repo's owner and the built-in token.
+The workflow also takes `output`, the path to save the GIF to, which defaults to `critter.gif`, and `login` and `token`, which default to the repo's owner and the built-in token. Set `branch` (for example `critter-output`) to keep the GIF off your default branch entirely: each run force-pushes it there as a single parentless commit, and the README image points at that branch's raw URL, so your main history never accumulates binary files. The keep-alive commit every 50 quiet days still lands on the default branch, where GitHub's 60-day switch-off looks.
 
 ## Add a critter
 
