@@ -6327,7 +6327,7 @@ async function main() {
     const login = input("login");
     if (!login) fail("login is empty, so there's no one to draw the critter for.");
     const reading = await lookUp(login, now, eggOn);
-    if (!reading && (0, import_node_fs2.existsSync)(gifPath)) {
+    if (!reading && (assetBranch || (0, import_node_fs2.existsSync)(gifPath))) {
       console.log("Leaving the critter as it was, and trying again at the next run.");
       return;
     }
@@ -6376,9 +6376,9 @@ async function main() {
   if (readmeChanged) (0, import_node_fs2.writeFileSync)(readmeName, nextReadme);
   if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
   if (assetBranch) {
+    useBotIdentity();
     if (readmeChanged) {
       git("add", "--force", "--", readmeName);
-      useBotIdentity();
       git("commit", "--quiet", "--message", plan.message);
       git("push", "--quiet");
       console.log(`${plan.added} to ${readmeName}.`);

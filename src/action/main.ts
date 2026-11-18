@@ -165,7 +165,7 @@ async function main(): Promise<void> {
     const login = input("login");
     if (!login) fail("login is empty, so there's no one to draw the critter for.");
     const reading = await lookUp(login, now, eggOn);
-    if (!reading && existsSync(gifPath)) {
+    if (!reading && (assetBranch || existsSync(gifPath))) {
       console.log("Leaving the critter as it was, and trying again at the next run.");
       return;
     }
@@ -222,9 +222,9 @@ async function main(): Promise<void> {
 
   if (assetBranch) {
     // The default branch only ever sees the README change; the GIF lives on the asset branch.
+    useBotIdentity();
     if (readmeChanged) {
       git("add", "--force", "--", readmeName);
-      useBotIdentity();
       git("commit", "--quiet", "--message", plan.message);
       git("push", "--quiet");
       console.log(`${plan.added} to ${readmeName}.`);
