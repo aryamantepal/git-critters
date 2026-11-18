@@ -32,14 +32,16 @@ function fixture(t: { after: (fn: () => void) => void }) {
   const head = git(checkout, "rev-parse", "HEAD");
   const preload = join(root, "fetch.cjs");
   writeFileSync(preload, 'globalThis.fetch = async () => { throw new Error("simulated API failure"); };\n');
-  const run = (inputs: Record<string, string> = {}) => {
-    const result = spawnSync(process.execPath, ["--require", preload, action], {
+  const spawn = (inputs: Record<string, string> = {}) =>
+    spawnSync(process.execPath, ["--require", preload, action], {
       cwd: checkout, encoding: "utf8", env: { ...env, GITHUB_REPOSITORY: "sam/sam", INPUT_BRANCH: "critter-output", INPUT_CRITTER: "fox", INPUT_ACTIVITY: "false", ...inputs },
     });
+  const run = (inputs: Record<string, string> = {}) => {
+    const result = spawn(inputs);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     return result.stdout;
   };
-  return { root, remote, seed, checkout, readme, head, git, run };
+  return { root, remote, seed, checkout, readme, head, git, spawn, run };
 }
 
 test("asset action sets bot identity on a fresh checkout even when README is unchanged", (t) => {
@@ -57,29 +59,52 @@ test("asset action sets bot identity on a fresh checkout even when README is unc
   assert.equal(readFileSync(join(f.checkout, "critter.gif")).subarray(0, 6).toString(), "GIF89a");
 });
 
-for (const existing of [true, false]) {
-  test(`API failure ${existing ? "preserves the remote asset" : "skips first install"} without rendering or pushing`, (t) => {
-    const f = fixture(t);
-    if (existing) {
-      f.run();
-      // Re-clone: the asset GIF is absent on a normal default-branch checkout.
-      rmSync(f.checkout, { recursive: true });
-      f.git(f.root, "clone", f.remote, f.checkout);
-    }
-    const hook = join(f.checkout, ".git/hooks/pre-push");
-    writeFileSync(hook, '#!/bin/sh\ntouch .git/push-attempted\nexit 1\n');
-    chmodSync(hook, 0o755);
-    const refs = f.git(f.remote, "show-ref");
-    const asset = existing ? f.git(f.remote, "rev-parse", "critter-output:critter.gif") : undefined;
-    const output = f.run({ INPUT_ACTIVITY: "true", INPUT_LOGIN: "sam" });
-    assert.match(output, /simulated API failure/);
-    assert.match(output, /trying again at the next run/);
-    assert.equal(existsSync(join(f.checkout, "critter.gif")), false);
-    assert.equal(existsSync(join(f.checkout, ".git/push-attempted")), false);
-    assert.equal(readFileSync(join(f.checkout, "README.md"), "utf8"), f.readme);
-    assert.equal(f.git(f.checkout, "rev-parse", "HEAD"), f.head);
-    assert.equal(f.git(f.checkout, "status", "--porcelain"), "");
-    assert.equal(f.git(f.remote, "show-ref"), refs);
-    if (existing) assert.equal(f.git(f.remote, "rev-parse", "critter-output:critter.gif"), asset);
-  });
-}
+test("API failure preserves the remote asset without rendering or pushing", (t) => {
+  const f = fixture(t);
+  f.run();
+  // Re-clone: the asset GIF is absent on a normal default-branch checkout.
+  rmSync(f.checkout, { recursive: true });
+  f.git(f.root, "clone", f.remote, f.checkout);
+  const hook = join(f.checkout, ".git/hooks/pre-push");
+  writeFileSync(hook, '#!/bin/sh\ntouch .git/push-attempted\nexit 1\n');
+  chmodSync(hook, 0o755);
+  const refs = f.git(f.remote, "show-ref");
+  const asset = f.git(f.remote, "rev-parse", "critter-output:critter.gif");
+  const output = f.run({ INPUT_ACTIVITY: "true", INPUT_LOGIN: "sam" });
+  assert.match(output, /simulated API failure/);
+  assert.match(output, /trying again at the next run/);
+  assert.equal(existsSync(join(f.checkout, "critter.gif")), false);
+  assert.equal(existsSync(join(f.checkout, ".git/push-attempted")), false);
+  assert.equal(readFileSync(join(f.checkout, "README.md"), "utf8"), f.readme);
+  assert.equal(f.git(f.checkout, "rev-parse", "HEAD"), f.head);
+  assert.equal(f.git(f.checkout, "status", "--porcelain"), "");
+  assert.equal(f.git(f.remote, "show-ref"), refs);
+  assert.equal(f.git(f.remote, "rev-parse", "critter-output:critter.gif"), asset);
+});
+
+test("API failure on the first install still draws a fresh critter onto a new asset branch", (t) => {
+  const f = fixture(t);
+  const output = f.run({ INPUT_ACTIVITY: "true", INPUT_LOGIN: "sam" });
+  assert.match(output, /simulated API failure/);
+  assert.doesNotMatch(output, /trying again at the next run/);
+  assert.equal(f.git(f.remote, "ls-tree", "--name-only", "critter-output"), "critter.gif");
+});
+
+test("a failed asset push leaves the default branch's README untouched", (t) => {
+  const f = fixture(t);
+  // Renaming the branch changes the README's src, so there is a README commit to hold back.
+  const hook = join(f.checkout, ".git/hooks/pre-push");
+  writeFileSync(hook, '#!/bin/sh\ngrep -q refs/heads/assets && exit 1\nexit 0\n');
+  chmodSync(hook, 0o755);
+  const result = f.spawn({ INPUT_BRANCH: "assets" });
+  assert.notEqual(result.status, 0);
+  assert.equal(f.git(f.remote, "rev-parse", "main"), f.head);
+});
+
+test("renaming the asset branch moves the README's image to the new branch", (t) => {
+  const f = fixture(t);
+  f.run({ INPUT_BRANCH: "assets" });
+  const readme = f.git(f.remote, "show", "main:README.md");
+  assert.match(readme, /src="https:\/\/raw\.githubusercontent\.com\/sam\/sam\/assets\/critter\.gif"/);
+  assert.equal(f.git(f.remote, "ls-tree", "--name-only", "assets"), "critter.gif");
+});

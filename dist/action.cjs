@@ -6136,6 +6136,11 @@ function assetRawUrl(repository, branch, gifPath) {
   const path = gifPath.split("/").map(encodeURIComponent).join("/");
   return `https://raw.githubusercontent.com/${repository}/${branch}/${path}`;
 }
+function isCritterSrc(repository, gifPath) {
+  const prefix = `https://raw.githubusercontent.com/${repository}/`;
+  const suffix = `/${gifPath.split("/").map(encodeURIComponent).join("/")}`;
+  return (src) => src === gifPath || src.startsWith(prefix) && src.endsWith(suffix) && src.length > prefix.length + suffix.length;
+}
 function pushAssetBranch(push, run) {
   const remote = push.remote ?? "origin";
   const index = ".git/git-critters-asset.index";
@@ -6198,14 +6203,15 @@ function hasOtherCreature(readme) {
   return !(readme.includes(START) && readme.includes(END)) && otherCreature(readme) !== null;
 }
 var OTHER_CREATURE_LEFTOVERS = "This takes the place of your git-koi koi. Its workflow will keep redrawing a GIF nobody sees, so delete .github/workflows/koi.yml and the koi folder.";
-function retargetCritterSrc(readme, from, to) {
+function retargetCritterSrc(readme, ours, to) {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
   if (start === -1 || end <= start) return readme;
-  const before = `src="${escapeAttribute(from)}"`;
-  const block = readme.slice(start, end);
-  if (!block.includes(before)) return readme;
-  return readme.slice(0, start) + block.split(before).join(`src="${escapeAttribute(to)}"`) + readme.slice(end);
+  const block = readme.slice(start, end).replace(/src="([^"]*)"/g, (whole, value) => {
+    const src = value.replace(/&lt;/g, "<").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    return ours(src) ? `src="${escapeAttribute(to)}"` : whole;
+  });
+  return readme.slice(0, start) + block + readme.slice(end);
 }
 function withCritterBlock(readme, block) {
   const start = readme.indexOf(START);
@@ -6329,7 +6335,7 @@ async function main() {
     const login = input("login");
     if (!login) fail("login is empty, so there's no one to draw the critter for.");
     const reading = await lookUp(login, now, eggOn);
-    if (!reading && (assetBranch || (0, import_node_fs2.existsSync)(gifPath))) {
+    if (!reading && (assetBranch ? assetBranchExists(assetBranch) : (0, import_node_fs2.existsSync)(gifPath))) {
       console.log("Leaving the critter as it was, and trying again at the next run.");
       return;
     }
@@ -6373,12 +6379,16 @@ async function main() {
   (0, import_node_fs2.mkdirSync)((0, import_node_path.dirname)(gifPath), { recursive: true });
   (0, import_node_fs2.writeFileSync)(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
   const blockSrc = assetBranch ? assetRawUrl(process.env.GITHUB_REPOSITORY, assetBranch, gifPath) : gifPath;
-  const nextReadme = withCritterBlock(assetBranch ? retargetCritterSrc(readme, gifPath, blockSrc) : readme, critterBlock(blockSrc));
+  const repository = process.env.GITHUB_REPOSITORY;
+  const ours = repository ? isCritterSrc(repository, gifPath) : (src) => src === gifPath;
+  const nextReadme = withCritterBlock(retargetCritterSrc(readme, ours, blockSrc), critterBlock(blockSrc));
   const readmeChanged = nextReadme !== readme;
   if (readmeChanged) (0, import_node_fs2.writeFileSync)(readmeName, nextReadme);
   if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
   if (assetBranch) {
     useBotIdentity();
+    pushAssetBranch({ gifPath, branch: assetBranch, message: plan.message, date: now }, gitRunner);
+    console.log(`${gifPath} now sits on ${assetBranch} as a single commit.`);
     if (readmeChanged) {
       git("add", "--force", "--", readmeName);
       git("commit", "--quiet", "--message", plan.message);
@@ -6387,8 +6397,6 @@ async function main() {
     } else {
       console.log("The README is already up to date, so the default branch gets no commit.");
     }
-    pushAssetBranch({ gifPath, branch: assetBranch, message: plan.message, date: now }, gitRunner);
-    console.log(`${gifPath} now sits on ${assetBranch} as a single commit.`);
     if (activity && needsKeepAlive(new Date(git("log", "-1", "--format=%cI").trim()), now)) {
       useBotIdentity();
       git("commit", "--quiet", "--allow-empty", "--message", KEEP_ALIVE_MESSAGE);
@@ -6412,5 +6420,12 @@ async function main() {
   git("commit", "--quiet", "--message", plan.message);
   git("push", "--quiet");
   console.log(`${plan.added} to ${readmeName}.`);
+}
+function assetBranchExists(branch) {
+  try {
+    return git("ls-remote", "--heads", "origin", `refs/heads/${branch}`).trim() !== "";
+  } catch {
+    return true;
+  }
 }
 main().catch((error) => fail(error instanceof Error ? error.message : String(error)));

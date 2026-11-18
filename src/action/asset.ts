@@ -16,6 +16,16 @@ export function assetRawUrl(repository: string, branch: string, gifPath: string)
 }
 
 /**
+ * Whether a README image src is this Action's GIF: the relative path, or its raw URL on any
+ * branch of the repository, so renaming or removing `branch:` can move it.
+ */
+export function isCritterSrc(repository: string, gifPath: string): (src: string) => boolean {
+  const prefix = `https://raw.githubusercontent.com/${repository}/`;
+  const suffix = `/${gifPath.split("/").map(encodeURIComponent).join("/")}`;
+  return (src) => src === gifPath || (src.startsWith(prefix) && src.endsWith(suffix) && src.length > prefix.length + suffix.length);
+}
+
+/**
  * Push the GIF to the asset branch as a single parentless commit, so the default branch
  * never accumulates binary history. `run` executes git and returns its stdout.
  */

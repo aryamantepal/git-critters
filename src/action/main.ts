@@ -13,7 +13,7 @@ import { DEFAULT_TRAITS } from "../engine/traits.ts";
 import type { Traits } from "../engine/traits.ts";
 import { readActivity, readEggContributions } from "./activity.ts";
 import type { EggReading, Look } from "./activity.ts";
-import { assetRawUrl, pushAssetBranch } from "./asset.ts";
+import { assetRawUrl, isCritterSrc, pushAssetBranch } from "./asset.ts";
 import { KEEP_ALIVE_MESSAGE, needsKeepAlive } from "./keepalive.ts";
 import { critterBlock, hasOtherCreature, OTHER_CREATURE_LEFTOVERS, retargetCritterSrc, withCritterBlock } from "./readme.ts";
 
@@ -165,7 +165,7 @@ async function main(): Promise<void> {
     const login = input("login");
     if (!login) fail("login is empty, so there's no one to draw the critter for.");
     const reading = await lookUp(login, now, eggOn);
-    if (!reading && (assetBranch || existsSync(gifPath))) {
+    if (!reading && (assetBranch ? assetBranchExists(assetBranch) : existsSync(gifPath))) {
       console.log("Leaving the critter as it was, and trying again at the next run.");
       return;
     }
@@ -215,7 +215,10 @@ async function main(): Promise<void> {
   writeFileSync(gifPath, encodeGif(plan.critter, plan.colourway, plan.traits));
   // On an asset branch the README points at the branch's raw URL, since a relative src resolves against the default branch.
   const blockSrc = assetBranch ? assetRawUrl(process.env.GITHUB_REPOSITORY!, assetBranch, gifPath) : gifPath;
-  const nextReadme = withCritterBlock(assetBranch ? retargetCritterSrc(readme, gifPath, blockSrc) : readme, critterBlock(blockSrc));
+  // Retarget in both modes, so renaming or removing branch: moves an existing block's image too.
+  const repository = process.env.GITHUB_REPOSITORY;
+  const ours = repository ? isCritterSrc(repository, gifPath) : (src: string) => src === gifPath;
+  const nextReadme = withCritterBlock(retargetCritterSrc(readme, ours, blockSrc), critterBlock(blockSrc));
   const readmeChanged = nextReadme !== readme;
   if (readmeChanged) writeFileSync(readmeName, nextReadme);
   if (hasOtherCreature(readme)) console.log(`::notice::${OTHER_CREATURE_LEFTOVERS}`);
@@ -223,6 +226,9 @@ async function main(): Promise<void> {
   if (assetBranch) {
     // The default branch only ever sees the README change; the GIF lives on the asset branch.
     useBotIdentity();
+    // The GIF goes first, so a failed push never leaves the README pointing at a missing image.
+    pushAssetBranch({ gifPath, branch: assetBranch, message: plan.message, date: now }, gitRunner);
+    console.log(`${gifPath} now sits on ${assetBranch} as a single commit.`);
     if (readmeChanged) {
       git("add", "--force", "--", readmeName);
       git("commit", "--quiet", "--message", plan.message);
@@ -231,8 +237,6 @@ async function main(): Promise<void> {
     } else {
       console.log("The README is already up to date, so the default branch gets no commit.");
     }
-    pushAssetBranch({ gifPath, branch: assetBranch, message: plan.message, date: now }, gitRunner);
-    console.log(`${gifPath} now sits on ${assetBranch} as a single commit.`);
     if (activity && needsKeepAlive(new Date(git("log", "-1", "--format=%cI").trim()), now)) {
       useBotIdentity();
       git("commit", "--quiet", "--allow-empty", "--message", KEEP_ALIVE_MESSAGE);
@@ -259,6 +263,15 @@ async function main(): Promise<void> {
   git("commit", "--quiet", "--message", plan.message);
   git("push", "--quiet");
   console.log(`${plan.added} to ${readmeName}.`);
+}
+
+/** Whether the asset branch already holds a GIF. If the check itself fails, assume it does and leave things alone. */
+function assetBranchExists(branch: string): boolean {
+  try {
+    return git("ls-remote", "--heads", "origin", `refs/heads/${branch}`).trim() !== "";
+  } catch {
+    return true;
+  }
 }
 
 main().catch((error) => fail(error instanceof Error ? error.message : String(error)));
