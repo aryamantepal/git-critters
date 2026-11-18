@@ -338,7 +338,7 @@ function confirmCompletedInstall(profile: Profile): void {
 
 let lookupNumber = 0;
 
-async function refreshProfile(): Promise<void> {
+async function refreshProfile(bypassCache = false): Promise<void> {
   const number = ++lookupNumber;
   const name = usernameInput.value.trim().replace(/^@/, "");
   if (!isValidUsername(name)) {
@@ -350,7 +350,7 @@ async function refreshProfile(): Promise<void> {
     return;
   }
   statusLine.textContent = `Looking up ${name}…`;
-  const profile = await lookUpProfile(name);
+  const profile = await lookUpProfile(name, { bypassCache });
   if (number !== lookupNumber) return;
   state.profile = profile;
   state.languages = "languages" in profile ? profile.languages : [];
@@ -373,7 +373,11 @@ usernameInput.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("focus", () => {
-  if (state.profile) void refreshProfile();
+  if (!state.profile) return;
+  // Coming back from "Add to my GitHub", the install state may have changed, so don't trust the cache.
+  const pending = pendingInstall();
+  const name = usernameInput.value.trim().replace(/^@/, "");
+  void refreshProfile(pending !== null && pending.toLocaleLowerCase() === name.toLocaleLowerCase());
 });
 
 addButton.addEventListener("click", (event) => {
