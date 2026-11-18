@@ -6,6 +6,7 @@ import { HATCH_AFTER } from "../src/activity/egg.ts";
 import { LIVELY_FROM, MARKS_FROM, STAGE_FROM } from "../src/activity/traits.ts";
 import { critters } from "../src/critters/index.ts";
 import { workflowFile } from "../src/site/links.ts";
+import { buildOgPng, buildShowcaseGif, OG_HEIGHT, OG_WIDTH, SHOWCASE_HEIGHT, SHOWCASE_WIDTH } from "../scripts/showcase.ts";
 
 const readme = readFileSync("README.md", "utf8");
 const action = readFileSync("action.yml", "utf8");
@@ -58,4 +59,32 @@ test("the preview site has searchable previews without an install-time picker", 
   assert.ok(html.includes('id="possible-hatchlings"'), "missing the hatchling preview gallery");
   assert.ok(html.includes('id="added-dialog"'), "missing installation confirmation dialog");
   assert.ok(html.includes('id="added-egg"'), "the confirmation should show the egg");
+});
+
+test("the social card is a 1200x630 PNG, byte-for-byte what the script renders", () => {
+  const png = readFileSync("site/og.png");
+  assert.ok(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), "not a PNG");
+  assert.equal(png.readUInt32BE(16), OG_WIDTH);
+  assert.equal(png.readUInt32BE(20), OG_HEIGHT);
+  assert.deepEqual(new Uint8Array(png), buildOgPng(), "site/og.png is stale; run npm run showcase");
+});
+
+test("the site declares OpenGraph and Twitter card tags with absolute URLs", () => {
+  const html = readFileSync("site/index.html", "utf8");
+  for (const tag of [
+    '<meta property="og:type" content="website"',
+    '<meta property="og:url" content="https://critters.aryamantepal.com/"',
+    '<meta property="og:title" content="git-critters"',
+    '<meta property="og:description"',
+    '<meta property="og:image" content="https://critters.aryamantepal.com/og.png"',
+    '<meta property="og:image:width" content="1200"',
+    '<meta property="og:image:height" content="630"',
+    '<meta property="og:image:alt"',
+    '<meta name="twitter:card" content="summary_large_image"',
+    '<meta name="twitter:title" content="git-critters"',
+    '<meta name="twitter:description"',
+    '<meta name="twitter:image" content="https://critters.aryamantepal.com/og.png"',
+  ]) {
+    assert.ok(html.includes(tag), tag);
+  }
 });
