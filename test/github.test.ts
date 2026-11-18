@@ -101,6 +101,40 @@ describe("site username lookups", () => {
 });
 
 describe("the lookup cache", () => {
+  test("a missing repo is not cached and the next lookup finds the newly created repo", async () => {
+    const routes = happyRoutes();
+    delete (routes as Record<string, unknown>)["/repos/sam/sam"];
+    const { impl, calls } = fakeFetch(routes);
+    const storage = fakeStorage();
+    const options = { fetchImpl: impl, storage, now: () => 1_000_000 };
+
+    assert.equal((await lookUpProfile("sam", options)).kind, "no-repo");
+    assert.equal(storage.map.size, 0, "missing repos must not be cached");
+
+    routes["/repos/sam/sam"] = { body: { default_branch: "main" } };
+    const ready = await lookUpProfile("sam", options);
+    assert.equal(ready.kind, "ready", "refresh finds the repo without waiting for the TTL");
+    assert.equal(calls.length, 8);
+    assert.deepEqual(await lookUpProfile("sam", options), ready);
+    assert.equal(calls.length, 8, "positive results remain cached");
+  });
+
+  test("an unexpired no-repo entry from an older version is ignored", async () => {
+    const { impl, calls } = fakeFetch(happyRoutes());
+    const storage = fakeStorage();
+    storage.setItem("git-critters:profile:sam", JSON.stringify({
+      at: 1_000_000,
+      profile: { kind: "no-repo", login: "sam", languages: [] },
+    }));
+    const options = { fetchImpl: impl, storage, now: () => 1_000_000 };
+
+    const ready = await lookUpProfile("SAM", options);
+    assert.equal(ready.kind, "ready");
+    assert.equal(calls.length, 5, "legacy no-repo entries trigger a fresh lookup");
+    assert.deepEqual(await lookUpProfile("sam", options), ready);
+    assert.equal(calls.length, 5, "the legacy entry is replaced with the positive result");
+  });
+
   test("a repeated lookup within the TTL makes no requests and is keyed case-insensitively", async () => {
     const { impl, calls } = fakeFetch(happyRoutes());
     const storage = fakeStorage();
