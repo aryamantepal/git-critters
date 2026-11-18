@@ -22,6 +22,12 @@ inputs:
   output:
     description: Where to save the GIF, relative to the repository's root.
     default: critter.gif
+  branch:
+    description: >-
+      Optional branch that holds only the GIF as one force-pushed commit, so the default
+      branch never accumulates binary history. The README image then points at that
+      branch's raw URL. Leave it out to keep committing the GIF to the current branch.
+    default: ""
   activity:
     description: >-
       Draw the critter from your public GitHub activity and redraw it each night: size from

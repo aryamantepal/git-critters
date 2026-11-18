@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { critterBlock, hasOtherCreature, README_CRITTER_ALT, withCritterBlock } from "../src/action/readme.ts";
+import { describe, test } from "node:test";
+import { isCritterSrc } from "../src/action/asset.ts";
+import { critterBlock, hasOtherCreature, README_CRITTER_ALT, retargetCritterSrc, withCritterBlock } from "../src/action/readme.ts";
 
 const block = critterBlock("critter.gif");
 
@@ -75,4 +76,38 @@ test("knows when a critter would replace a koi, but not when a critter is alread
   assert.ok(hasOtherCreature(`# Hi\n\n${koi}\n`));
   assert.ok(!hasOtherCreature(`${koi}\n\n${block}\n`));
   assert.ok(!hasOtherCreature("# Hi\n"));
+});
+
+describe("retargeting the block's image when the GIF moves to an asset branch", () => {
+  const url = "https://raw.githubusercontent.com/sam/sam/critter-output/critter.gif";
+  const ours = isCritterSrc("sam/sam", "critter.gif");
+
+  test("rewrites only the src inside the marked block", () => {
+    const readme = `# Hello\n\n${block}\n\n<img src="critter.gif" /> elsewhere\n`;
+    const moved = retargetCritterSrc(readme, ours, url);
+    assert.ok(moved.includes(`src="${url}"`));
+    assert.ok(moved.includes('<img src="critter.gif" /> elsewhere'), "images outside the block stay put");
+    assert.equal(moved.match(/critter\.gif/g)?.length, 2, "the URL still ends in critter.gif, plus the outside image");
+    // And the block is still preserved byte for byte afterwards.
+    assert.equal(withCritterBlock(moved, critterBlock(url)), moved);
+  });
+
+  test("leaves READMEs without a block, or with another src, alone", () => {
+    assert.equal(retargetCritterSrc("# Hi\n", ours, url), "# Hi\n");
+    const other = block.replace('src="critter.gif"', 'src="other.gif"');
+    assert.equal(retargetCritterSrc(`${other}\n`, ours, url), `${other}\n`);
+  });
+
+  test("follows a renamed branch, and comes back to the relative path when branch: is removed", () => {
+    const readme = `${block.replace('src="critter.gif"', `src="${url}"`)}\n`;
+    const renamed = "https://raw.githubusercontent.com/sam/sam/assets/critter.gif";
+    assert.ok(retargetCritterSrc(readme, ours, renamed).includes(`src="${renamed}"`));
+    assert.equal(retargetCritterSrc(readme, ours, "critter.gif"), `${block}\n`);
+  });
+
+  test("leaves another repository's or another file's raw URL alone", () => {
+    assert.ok(!ours("https://raw.githubusercontent.com/kim/kim/main/critter.gif"));
+    assert.ok(!ours("https://raw.githubusercontent.com/sam/sam/main/other.gif"));
+    assert.ok(!ours("https://raw.githubusercontent.com/sam/sam/critter.gif"));
+  });
 });
