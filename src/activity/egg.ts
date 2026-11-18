@@ -30,6 +30,7 @@ export interface PoolEntry {
  * only change that can't mutate an existing user's hatched critter.
  */
 export const HATCHLING_POOL: readonly PoolEntry[] = Object.freeze([
+  // penguin and fox reached the v1 tag at 2026-11-16T22:46:07Z. Before that, v1 hatched from the first ten.
   { id: "dragon", introducedAt: POOL_EPOCH },
   { id: "axolotl", introducedAt: POOL_EPOCH },
   { id: "jellyfish", introducedAt: POOL_EPOCH },
@@ -40,8 +41,8 @@ export const HATCHLING_POOL: readonly PoolEntry[] = Object.freeze([
   { id: "mushroom", introducedAt: POOL_EPOCH },
   { id: "turtle", introducedAt: POOL_EPOCH },
   { id: "bat", introducedAt: POOL_EPOCH },
-  { id: "penguin", introducedAt: POOL_EPOCH },
-  { id: "fox", introducedAt: POOL_EPOCH },
+  { id: "penguin", introducedAt: "2026-11-16T22:46:07Z" },
+  { id: "fox", introducedAt: "2026-11-16T22:46:07Z" },
 ]);
 
 /**
