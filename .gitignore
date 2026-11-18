@@ -1,3 +1,4 @@
 node_modules/
 site/app.js
 *.gif
+!docs/showcase.gif
