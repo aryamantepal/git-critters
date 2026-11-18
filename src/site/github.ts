@@ -14,8 +14,8 @@ export type Profile =
 
 const API = "https://api.github.com";
 
-async function get(path: string, accept = "application/vnd.github+json"): Promise<Response> {
-  return fetch(`${API}${path}`, { headers: { Accept: accept } });
+async function get(fetchImpl: typeof fetch, path: string, accept = "application/vnd.github+json"): Promise<Response> {
+  return fetchImpl(`${API}${path}`, { headers: { Accept: accept } });
 }
 
 class LookupFailed extends Error {}
@@ -25,33 +25,39 @@ function assertUsable(response: Response): void {
 }
 
 /** The same repo list the Action reads, so the preview and the real critter agree. A failure just means no languages. */
-async function lookUpLanguages(login: string): Promise<string[]> {
+async function lookUpLanguages(login: string, fetchImpl: typeof fetch): Promise<string[]> {
   try {
-    const response = await get(`/users/${login}/repos?per_page=100&type=owner&sort=pushed`);
+    const response = await get(fetchImpl, `/users/${login}/repos?per_page=100&type=owner&sort=pushed`);
     return response.ok ? topLanguages((await response.json()) as RepoLanguage[]) : [];
   } catch {
     return [];
   }
 }
 
-export async function lookUpProfile(username: string): Promise<Profile> {
-  const languagesLookup = lookUpLanguages(username);
+/**
+ * Look up a username, reading `/users` first so a typo or an organization costs one
+ * request instead of two. Anonymous callers only get 60 requests an hour per IP.
+ */
+async function lookUpUncached(username: string, fetchImpl: typeof fetch): Promise<Profile> {
   try {
-    const userResponse = await get(`/users/${username}`);
+    const userResponse = await get(fetchImpl, `/users/${username}`);
     if (userResponse.status === 404) return { kind: "missing" };
     assertUsable(userResponse);
     const user = (await userResponse.json()) as { login: string; type: string };
     const { login } = user;
     if (user.type === "Organization") return { kind: "organization", login };
 
-    const repoResponse = await get(`/repos/${login}/${login}`);
-    if (repoResponse.status === 404) return { kind: "no-repo", login, languages: await languagesLookup };
+    const [repoResponse, languages] = await Promise.all([
+      get(fetchImpl, `/repos/${login}/${login}`),
+      lookUpLanguages(login, fetchImpl),
+    ]);
+    if (repoResponse.status === 404) return { kind: "no-repo", login, languages };
     assertUsable(repoResponse);
     const repo = (await repoResponse.json()) as { default_branch: string };
 
     const [readmeResponse, workflowResponse] = await Promise.all([
-      get(`/repos/${login}/${login}/readme`, "application/vnd.github.html+json"),
-      get(`/repos/${login}/${login}/contents/${WORKFLOW_PATH}`),
+      get(fetchImpl, `/repos/${login}/${login}/readme`, "application/vnd.github.html+json"),
+      get(fetchImpl, `/repos/${login}/${login}/contents/${WORKFLOW_PATH}`),
     ]);
     assertUsable(readmeResponse);
     assertUsable(workflowResponse);
@@ -61,11 +67,79 @@ export async function lookUpProfile(username: string): Promise<Profile> {
       branch: repo.default_branch,
       readmeHtml: readmeResponse.ok ? await readmeResponse.text() : null,
       installed: workflowResponse.ok,
-      languages: await languagesLookup,
+      languages,
     };
   } catch {
     return { kind: "unknown", login: username };
   }
+}
+
+/** Resolved profiles wait in sessionStorage this long before they're looked up again. */
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
+const PROFILE_CACHE_PREFIX = "git-critters:profile:";
+
+type ProfileStorage = Pick<Storage, "getItem" | "setItem">;
+
+function defaultStorage(): ProfileStorage | null {
+  try {
+    return sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readCachedProfile(key: string, storage: ProfileStorage | null, now: number): Profile | null {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(key);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { at: number; profile: Profile };
+    // Checked here too, since an older version of the site cached what it no longer does.
+    if (!isCacheable(cached.profile) || now - cached.at > PROFILE_CACHE_TTL_MS) return null;
+    return cached.profile;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Only answers unlikely to change soon are cached. A missing profile repo or workflow may be
+ * added in another tab at any moment, so those are always looked up again.
+ */
+function isCacheable(profile: Profile): boolean {
+  if (profile.kind === "unknown" || profile.kind === "no-repo") return false;
+  return profile.kind !== "ready" || profile.installed;
+}
+
+function writeCachedProfile(key: string, profile: Profile, storage: ProfileStorage | null, now: number): void {
+  if (!storage || !isCacheable(profile)) return;
+  try {
+    storage.setItem(key, JSON.stringify({ at: now, profile }));
+  } catch {
+    // A full or blocked storage just means the next lookup goes to GitHub again.
+  }
+}
+
+export interface LookupOptions {
+  /** Skip the cache, for when the answer may have changed since it was stored. */
+  bypassCache?: boolean;
+  fetchImpl?: typeof fetch;
+  storage?: ProfileStorage | null;
+  now?: () => number;
+}
+
+export async function lookUpProfile(username: string, options: LookupOptions = {}): Promise<Profile> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const storage = options.storage === undefined ? defaultStorage() : options.storage;
+  const now = options.now ?? Date.now;
+  const key = PROFILE_CACHE_PREFIX + username.toLowerCase();
+  if (!options.bypassCache) {
+    const cached = readCachedProfile(key, storage, now());
+    if (cached) return cached;
+  }
+  const profile = await lookUpUncached(username, fetchImpl);
+  writeCachedProfile(key, profile, storage, now());
+  return profile;
 }
 
 export const CRITTER_SLOT = "critter-slot";
