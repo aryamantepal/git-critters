@@ -3261,15 +3261,15 @@ var DRIFT = [
 var BUBBLES2 = 60;
 var MARKS3 = [
   [],
-  [[0, 20]],
+  [[0, 22.5]],
   [
-    [-4, 19],
-    [4, 19]
+    [-2, 22],
+    [2, 22]
   ],
   [
-    [-5.5, 18],
-    [0, 21],
-    [5.5, 18]
+    [-2.2, 21],
+    [0, 23.5],
+    [2.2, 21]
   ]
 ];
 var COLOUR_NAMES7 = [
@@ -3433,8 +3433,8 @@ function drawPad(canvas, pad, index, bobs) {
 function drawFrog(canvas, pose, traits) {
   const k = STAGE_SCALE[traits.stage];
   const s = pose.stretch;
-  const wf = 1 - 0.1 * s;
-  const hf = 1 + 0.16 * s;
+  const wf = 1 - 0.12 * s;
+  const hf = 1 + 0.18 * s;
   const leap = Math.max(0, s);
   const ax = round(pose.x);
   const ay = round(pose.y);
@@ -3442,84 +3442,136 @@ function drawFrog(canvas, pose, traits) {
   const up = (n) => n * k * hf;
   const mask = () => canvas.mask();
   const sink = pose.gulp > 0.2 ? Math.max(1, round(1.3 * k)) : 0;
-  const bodyRy = 12 * k * hf;
-  const body = ellipse3(mask(), ax, ay - bodyRy, 15 * k * wf, bodyRy);
-  const eyeY = round(ay - up(24.5)) + sink;
+  const headY = round(ay - up(15.5)) + sink;
+  const head = ellipse3(mask(), ax, headY, 13.5 * k * wf, 8.5 * k * hf);
+  const bodyY = round(ay - up(7)) + sink;
+  const body = ellipse3(mask(), ax, bodyY, 11 * k * wf, 6.5 * k * hf);
+  const eyeDist = 8.5;
+  const eyeY = round(headY - up(6.2));
   const eyes = mask();
   const thighs = mask();
   const feet = mask();
   const arms = mask();
   const hands = mask();
   for (const side of [-1, 1]) {
-    eyes.addDisc(ax + side * across(9.5), eyeY, 6 * k);
-    ellipse3(thighs, ax + side * across(14 + 1.5 * leap), ay - up(8 - 3 * leap), 7.5 * k * wf, 8 * k * hf);
-    ellipse3(feet, ax + side * across(17 + 3 * leap), ay - up(1.5 - 8 * leap), (7 - 1.5 * leap) * k * wf, Math.max(1.4, 2.5 * k));
-    ellipse3(arms, ax + side * across(9), ay - up(4), Math.max(1.5, 2.8 * k), 5 * k * hf);
-    ellipse3(hands, ax + side * across(9.5), ay - up(0.8), 4 * k, Math.max(1.2, 1.8 * k));
+    const ex = ax + side * across(eyeDist);
+    eyes.addDisc(ex, eyeY, 5.5 * k);
+    if (leap < 0.1) {
+      const tx = ax + side * across(10.5);
+      const ty = ay - up(4.5) + sink;
+      ellipse3(thighs, tx, ty, 4.8 * k * wf, 4.5 * k * hf);
+      const fx = ax + side * across(11);
+      const fy = ay - up(1.2);
+      ellipse3(feet, fx, fy, 4 * k * wf, Math.max(1.3, 1.8 * k));
+      ellipse3(feet, fx - side * 2.2 * k, fy + 0.2 * k, 1.4 * k, 1.4 * k);
+      ellipse3(feet, fx + side * 2.2 * k, fy + 0.2 * k, 1.4 * k, 1.4 * k);
+      const armX = ax + side * across(6.5);
+      const armY = ay - up(4) + sink;
+      ellipse3(arms, armX, armY, Math.max(1.3, 1.8 * k), 3.2 * k * hf);
+      const handX = ax + side * across(6.5);
+      const handY = ay - up(1.2) + sink;
+      ellipse3(hands, handX, handY, 1.9 * k, Math.max(1.1, 1.5 * k));
+    } else {
+      const tx = ax + side * across(7 + 4 * leap);
+      const ty = ay - up(3 - 1 * leap) + sink;
+      ellipse3(thighs, tx, ty, (4.5 - 1 * leap) * k * wf, (4.5 + 2 * leap) * k * hf);
+      const fx = ax + side * across(9 + 5 * leap);
+      const fy = ay - up(0.5 - 3 * leap);
+      ellipse3(feet, fx, fy, (3.5 - 0.5 * leap) * k * wf, Math.max(1.3, 2.2 * k));
+      const armX = ax + side * across(6 + 2 * leap);
+      const armY = ay - up(6 + 3 * leap) + sink;
+      ellipse3(arms, armX, armY, Math.max(1.3, 1.8 * k), 3.5 * k * hf);
+      const handX = ax + side * across(6.5 + 2.5 * leap);
+      const handY = ay - up(3.5 + 3.5 * leap) + sink;
+      ellipse3(hands, handX, handY, 1.9 * k, Math.max(1.1, 1.5 * k));
+    }
   }
-  const silhouette = mask().add(body).add(eyes).add(thighs).add(feet).add(arms).add(hands);
+  const silhouette = mask().add(head).add(body).add(eyes).add(thighs).add(feet).add(arms).add(hands);
   canvas.sticker(silhouette, C7.body, C7.line);
   canvas.fill(silhouette.minus(silhouette.moved(-1, -2)), C7.bodyLo);
   canvas.fill(silhouette.minus(silhouette.moved(1, 2)), C7.bodyHi);
-  const pulse = 0.6 * k * pose.breath + 2.2 * k * pose.gulp;
-  const belly = ellipse3(mask(), ax, ay - up(3.5), 10.5 * k * wf, 4.5 * k * hf + pulse).and(body);
+  const pulse = 0.6 * k * pose.breath + 1.8 * k * pose.gulp;
+  const bellyY = round(ay - up(5.2)) + sink;
+  const belly = ellipse3(mask(), ax, bellyY, 7.5 * k * wf, 4.5 * k * hf + pulse).and(body);
   canvas.fill(belly, C7.belly);
   canvas.fill(belly.minus(belly.moved(0, -1)), C7.bellyLo);
-  for (const limb of [thighs, feet, arms, hands]) {
-    canvas.sticker(limb, C7.body, C7.line);
-    canvas.fill(limb.minus(limb.moved(-1, -1)), C7.bodyLo);
-    canvas.fill(limb.minus(limb.moved(1, 1)), C7.bodyHi);
+  if (leap < 0.1) {
+    for (const side of [-1, 1]) {
+      const tx = ax + side * across(10.5);
+      const ty = ay - up(4.5) + sink;
+      const crease = ellipse3(mask(), tx - side * across(1.2), ty, 4.2 * k * wf, 4.2 * k * hf).and(body);
+      canvas.fill(crease, C7.bodyLo);
+    }
   }
   const spots = mask();
-  for (const [dx, dy] of MARKS3[traits.marks]) spots.addDisc(ax + round(dx * k * wf), round(ay - up(dy)), Math.max(1.2, 1.6 * k));
-  canvas.fill(spots.and(body), C7.spot);
+  for (const [dx, dy] of MARKS3[traits.marks]) spots.addDisc(ax + round(dx * k * wf), round(ay - up(dy)) + sink, Math.max(1.2, 1.6 * k));
+  canvas.fill(spots.and(head), C7.spot);
   const cheeks = mask();
   for (const side of [-1, 1]) {
-    const cx = ax + side * across(12);
-    const cy = round(ay - up(15));
-    for (let x = -1; x <= 1; x++) cheeks.addPixel(cx + x, cy).addPixel(cx + x, cy + 1);
+    const cx = ax + side * across(8.5);
+    const cy = round(headY + up(1.5));
+    for (let dx = -1; dx <= 1; dx++) {
+      cheeks.addPixel(cx + dx, cy);
+      if (k >= 0.85) cheeks.addPixel(cx + dx, cy + 1);
+    }
   }
-  canvas.fill(cheeks.and(body), C7.blush);
-  const whiteR = Math.max(2.1, 3.7 * k);
-  const pupil = k >= 0.85 ? 3 : 2;
+  canvas.fill(cheeks.and(head), C7.blush);
+  const whiteR = Math.max(2.2, 4 * k);
   for (const side of [-1, 1]) {
-    const ex = ax + side * across(9.5);
+    const ex = ax + side * across(eyeDist);
     const sclera = mask().addDisc(ex, eyeY, whiteR);
-    const ring = k >= 0.7;
     if (pose.shut) {
-      if (ring) canvas.sticker(sclera, C7.body, C7.line);
       const lid = mask();
-      for (let x = -Math.trunc(whiteR); x <= Math.trunc(whiteR); x++) lid.addPixel(ex + x, eyeY + 1);
+      const r = Math.trunc(whiteR);
+      for (let dx = -r; dx <= r; dx++) {
+        const curve = Math.abs(dx) <= 1 ? -1 : 0;
+        lid.addPixel(ex + dx, eyeY + curve);
+      }
       canvas.fill(lid.and(sclera), C7.line);
       continue;
     }
-    if (ring) canvas.sticker(sclera, C7.white, C7.line);
-    else canvas.fill(sclera, C7.white);
+    canvas.fill(sclera, C7.white);
+    const lookX = pose.look[0] * (k >= 0.85 ? 1.4 : 0.9);
+    const lookY = pose.look[1] * (k >= 0.85 ? 1.4 : 0.9);
+    const px = round(ex + lookX);
+    const py = round(eyeY + lookY);
     const dark = mask();
-    const left = ex - Math.floor(pupil / 2) + pose.look[0];
-    const top = eyeY - Math.floor(pupil / 2) + pose.look[1];
-    for (let y = 0; y < pupil; y++) for (let x = 0; x < pupil; x++) dark.addPixel(left + x, top + y);
-    canvas.fill(dark.and(sclera), C7.eye);
-    if (pupil === 3) canvas.fill(mask().addPixel(left, top), C7.white);
-  }
-  const half = Math.max(5, round(13 * k * wf));
-  const baseY = ay - round(11 * k * hf);
-  const gape = 5 * k * hf * pose.mouth;
-  const lip = mask();
-  const inside = mask();
-  for (let x = -half; x <= half; x++) {
-    const f = (x / half) ** 2;
-    const top = baseY - round(3 * k * f);
-    lip.addPixel(ax + x, top);
-    const rows = round(gape * (1 - f));
-    if (rows > 0) {
-      for (let r = 1; r < rows; r++) inside.addPixel(ax + x, top + r);
-      lip.addPixel(ax + x, top + rows);
+    if (k >= 0.85) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          dark.addPixel(px + dx, py + dy);
+        }
+      }
+      canvas.fill(dark.and(sclera), C7.eye);
+    } else {
+      dark.addPixel(px, py).addPixel(px + 1, py).addPixel(px, py + 1).addPixel(px + 1, py + 1);
+      canvas.fill(dark.and(sclera), C7.eye);
     }
   }
-  canvas.fill(inside, C7.mouth);
-  canvas.fill(lip, C7.line);
-  return [ax, baseY + round(gape / 2)];
+  const mouthY = round(headY + up(3.5));
+  if (pose.mouth <= 0) {
+    const lip = mask();
+    if (k >= 0.85) {
+      lip.addPixel(ax - 2, mouthY - 1);
+      lip.addPixel(ax - 1, mouthY);
+      lip.addPixel(ax, mouthY + 1);
+      lip.addPixel(ax + 1, mouthY);
+      lip.addPixel(ax + 2, mouthY - 1);
+    } else {
+      lip.addPixel(ax - 1, mouthY);
+      lip.addPixel(ax, mouthY + 1);
+      lip.addPixel(ax + 1, mouthY);
+    }
+    canvas.fill(lip, C7.line);
+    return [ax, mouthY];
+  }
+  const mouthRx = Math.max(2.5, round(3.6 * k * wf));
+  const mouthRy = Math.max(2, round(2.8 * k * hf * pose.mouth));
+  const mouthCenterY = mouthY + round(mouthRy / 2);
+  const openMouth = ellipse3(mask(), ax, mouthCenterY, mouthRx, mouthRy);
+  canvas.fill(openMouth.grown(), C7.line);
+  canvas.fill(openMouth, C7.mouth);
+  return [ax, mouthCenterY];
 }
 function drawTongue(canvas, pose, root, caught, k) {
   if (pose.tongue <= 0) return null;
