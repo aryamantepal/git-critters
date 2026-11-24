@@ -20,9 +20,9 @@ export const OG_HEIGHT = 630;
 
 const CELL_SCALE = 2;
 const COLUMNS = 4;
-const FRAME_COUNT = 12;
-const FRAME_DELAY_MS = 60;
-const SHOWCASE_TRAITS: Traits = { stage: 3, marks: 2, mood: "lively" };
+const FRAME_COUNT = 48;
+const FRAME_DELAY_MS = 80;
+const SHOWCASE_TRAITS: Traits = { stage: 3, marks: 2, mood: "steady" };
 const OG_BACKGROUND: readonly [number, number, number] = [0x0d, 0x11, 0x17]; // GitHub's dark page
 
 /** The banner's cells: the egg, then signature critters in distinct language palettes. */
