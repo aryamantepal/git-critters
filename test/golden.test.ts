@@ -46,6 +46,9 @@ const HASHES: Record<string, string> = {
   "fox/russet": "91d2397ab8c84a453494ae6ec50f761027f91b951f7fe9a526d612ad07f8c53e",
   "fox/arctic": "0cd809cd54cf63e340e5d2171e8b0d34b6f83af7568714f4b43ddfc7f13d0276",
   "fox/silver": "c3bd7c66789e4e2ed3803ab1ef600961bd2d313dd5a55834e0fe1ab29202dcc0",
+  "turkey/autumn": "e6ef254dac6d80fe30ca37940052d237b66217bd3fb08d0e9380218fe9182cb7",
+  "turkey/heritage": "1423a49bbd71514c08e0ec29e48456a3d3ec270faa0744958b3ae9e96b829061",
+  "turkey/harvest": "b476c31f34631b3049dd7e4a61e6f97f1e432d93f357495e1e165d7977bd27b1",
 };
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");

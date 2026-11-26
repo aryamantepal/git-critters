@@ -46,13 +46,13 @@ describe("hatching", () => {
 describe("the automatic hatchling", () => {
   test("is the same critter for the same login, whatever its case", () => {
     const locked: Record<string, string> = {
-      octocat: "frog",
-      aryamantepal: "robot",
-      github: "jellyfish",
-      "ada-lovelace": "bat",
-      "Zoe-9": "fox",
-      sam: "turtle",
-      a: "robot",
+      octocat: "turtle",
+      aryamantepal: "jellyfish",
+      github: "dragon",
+      "ada-lovelace": "robot",
+      "Zoe-9": "turkey",
+      sam: "axolotl",
+      a: "axolotl",
     };
     for (const [login, critter] of Object.entries(locked)) {
       assert.equal(hatchlingFor(login), critter, login);
@@ -85,15 +85,22 @@ describe("the automatic hatchling", () => {
 
   test("penguin and fox join at the moment v1 shipped them, not at the epoch", () => {
     const ten = HATCHLING_POOL.slice(0, 10);
+    const twelve = HATCHLING_POOL.slice(0, 12);
     assert.deepEqual(poolFor(new Date("2026-11-16T22:46:06Z")), ten);
-    assert.deepEqual(poolFor(new Date("2026-11-16T22:46:07Z")), HATCHLING_POOL);
+    assert.deepEqual(poolFor(new Date("2026-11-16T22:46:07Z")), twelve);
+  });
+
+  test("turkey joins at its activation timestamp", () => {
+    const twelve = HATCHLING_POOL.slice(0, 12);
+    assert.deepEqual(poolFor(new Date("2026-11-26T21:59:59Z")), twelve);
+    assert.deepEqual(poolFor(new Date("2026-11-26T22:00:00Z")), HATCHLING_POOL);
   });
 });
 
 describe("pool epochs", () => {
   const FUTURE = "2030-06-01T12:00:00Z";
   const extended = [...HATCHLING_POOL, { id: "unicorn", introducedAt: FUTURE }] as const;
-  const beforeFuture = new Date("2026-11-20T00:00:00Z");
+  const beforeFuture = new Date("2026-11-27T00:00:00Z");
   const afterFuture = new Date(FUTURE);
 
   test("no date sees the whole pool, and the epoch and anything earlier see the original ten", () => {
