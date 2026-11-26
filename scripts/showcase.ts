@@ -14,31 +14,49 @@ import { encodeGifFrames } from "../src/engine/gif.ts";
 import type { Traits } from "../src/engine/traits.ts";
 
 export const SHOWCASE_WIDTH = 1440;
-export const SHOWCASE_HEIGHT = 480;
+export const SHOWCASE_HEIGHT = 960;
 export const OG_WIDTH = 1200;
 export const OG_HEIGHT = 630;
 
 const CELL_SCALE = 2;
 const COLUMNS = 4;
-const FRAME_COUNT = 12;
-const FRAME_DELAY_MS = 60;
-const SHOWCASE_TRAITS: Traits = { stage: 3, marks: 2, mood: "lively" };
+const FRAME_COUNT = 32;
+const FRAME_DELAY_MS = 90;
+const SHOWCASE_TRAITS: Traits = { stage: 3, marks: 2, mood: "steady" };
 const OG_BACKGROUND: readonly [number, number, number] = [0x0d, 0x11, 0x17]; // GitHub's dark page
 
-/** The banner's cells: the egg, then signature critters in distinct language palettes. */
-const SHOWCASE_CELLS: readonly { id: string; languages: [string, string] }[] = [
-  { id: "egg", languages: ["TypeScript", "Python"] },
+interface ShowcaseCellSpec {
+  id: string;
+  languages: [string, string];
+  stage?: 0 | 1 | 2 | 3;
+}
+
+/** The 4x4 banner: the egg cracking in 4 stages, then all 12 critters in distinct language palettes. */
+const SHOWCASE_CELLS: readonly ShowcaseCellSpec[] = [
+  // Row 1: Egg progression from fresh egg to glowing cracks
+  { id: "egg", languages: ["TypeScript", "Python"], stage: 0 },
+  { id: "egg", languages: ["Rust", "Go"], stage: 1 },
+  { id: "egg", languages: ["JavaScript", "CSS"], stage: 2 },
+  { id: "egg", languages: ["Swift", "Kotlin"], stage: 3 },
+  // Row 2
   { id: "dragon", languages: ["Rust", "Go"] },
-  { id: "fox", languages: ["JavaScript", "CSS"] },
-  { id: "penguin", languages: ["Python", "Ruby"] },
-  { id: "ghost", languages: ["Go", "Rust"] },
   { id: "axolotl", languages: ["Java", "C++"] },
-  { id: "robot", languages: ["C#", "Java"] },
   { id: "jellyfish", languages: ["Swift", "Kotlin"] },
+  { id: "ghost", languages: ["Go", "Rust"] },
+  // Row 3
+  { id: "robot", languages: ["C#", "Java"] },
+  { id: "cat", languages: ["PHP", "JavaScript"] },
+  { id: "frog", languages: ["HTML", "CSS"] },
+  { id: "mushroom", languages: ["Ruby", "HTML"] },
+  // Row 4
+  { id: "turtle", languages: ["C", "Assembly"] },
+  { id: "bat", languages: ["Dart", "TypeScript"] },
+  { id: "penguin", languages: ["Python", "Ruby"] },
+  { id: "fox", languages: ["JavaScript", "CSS"] },
 ];
 
 /** The social card's critters, beside a big egg. */
-const OG_CELLS: readonly { id: string; languages: [string, string] }[] = [
+const OG_CELLS: readonly ShowcaseCellSpec[] = [
   { id: "dragon", languages: ["Rust", "Go"] },
   { id: "fox", languages: ["JavaScript", "CSS"] },
   { id: "penguin", languages: ["Python", "Ruby"] },
@@ -53,13 +71,13 @@ interface Cell {
   traits: Traits;
 }
 
-function cellsOf(list: readonly { id: string; languages: [string, string] }[]): Cell[] {
-  return list.map(({ id, languages }) => {
+function cellsOf(list: readonly ShowcaseCellSpec[]): Cell[] {
+  return list.map(({ id, languages, stage }) => {
     const critter = id === "egg" ? egg : findCritter(id)!;
     return {
       critter,
       way: languageColourway(critter, languages),
-      traits: id === "egg" ? FRESH_EGG : SHOWCASE_TRAITS,
+      traits: id === "egg" ? { stage: stage ?? 0, marks: 0, mood: "steady" } : SHOWCASE_TRAITS,
     };
   });
 }

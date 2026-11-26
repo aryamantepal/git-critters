@@ -5,7 +5,7 @@ Pixel-art critters for your GitHub profile README. Add an egg in one click and d
 **[Add a critter](https://critters.aryamantepal.com)**
 
 <a href="https://critters.aryamantepal.com">
-  <img src="docs/showcase.gif" width="720" alt="A speckled egg and seven pixel-art critters, each in different language colours" />
+  <img src="docs/showcase.gif" width="720" alt="The speckled egg cracking and all twelve pixel-art critters, each in different language colours" />
 </a>
 
 ## How it works
