@@ -93,6 +93,7 @@ The site and the workflow above intentionally offer no species choice. For backw
 | `bat` | `dusk`, `cocoa`, `mist` |
 | `penguin` | `tuxedo`, `ice`, `gentoo` |
 | `fox` | `russet`, `arctic`, `silver` |
+| `turkey` | `autumn`, `heritage`, `harvest` |
 
 Leaving `critter` and `colour` out gives you the automatic egg and language colours. Existing workflows with `critter: surprise`, a named critter, `egg`, or a fixed `colour` continue to work, but the site no longer generates those choices.
 

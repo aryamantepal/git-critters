@@ -43,6 +43,7 @@ export const HATCHLING_POOL: readonly PoolEntry[] = Object.freeze([
   { id: "bat", introducedAt: POOL_EPOCH },
   { id: "penguin", introducedAt: "2026-11-16T22:46:07Z" },
   { id: "fox", introducedAt: "2026-11-16T22:46:07Z" },
+  { id: "turkey", introducedAt: "2026-11-26T22:00:00Z" },
 ]);
 
 /**

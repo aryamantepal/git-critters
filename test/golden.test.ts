@@ -1,6 +1,6 @@
 // Someone's committed GIF should only change when they ask for a different critter.
 // These are the SHA-256 hashes of each colourway's GIF with the default traits,
-// taken before traits existed (the dragon's after its redesign), so the art has to
+// taken before traits existed (the dragon's and frog's after redesign), so the art has to
 // stay byte for byte the same.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -28,9 +28,9 @@ const HASHES: Record<string, string> = {
   "cat/marmalade": "622221cc5ed9237436ffa9be91feb19bf2f9dc7a7360c43a99c014eceb66dea2",
   "cat/smoke": "49bbc9ea402e657e39a6ecefdfeb6dc80d103dfce1cf93158d27a2d75eccd468",
   "cat/tuxedo": "eabdc3ca1bc60d9203e468c5b85eba477d9d7d277dc29d77cc4cd79352b504d3",
-  "frog/meadow": "a129d3f5aed0de030f298e2af9c62aeab3831df40f00493f09653cbe494616ed",
-  "frog/cobalt": "fff5268caaa9187c5852a683f22f93a87d48f7642123ebf5b42a7c0049da6e5c",
-  "frog/tomato": "6a15a0230b225daded370155c74c6a820d5a53963ba9cc6f8e75817db4836055",
+  "frog/meadow": "8ed0b3df2d65b85e66e54fac76724727869b330171fd07f006e3bea9044aa1ae",
+  "frog/cobalt": "9874dc0269d97d861e22d42458209d7f56acda3549f0094c64166e6c80039359",
+  "frog/tomato": "e5d78d11764b290c53dcb801b01b1d56563052938aaae10c504fe8cb73b78501",
   "mushroom/umber": "4957617c27eb2ebf37221f5ddd1fb604cb66febdbc5a3372ba67eb24d973c3bf",
   "mushroom/glowcap": "cf83dcdf98c6afedfca49ac795a9be6d8b15bd8f8b98f149cb32d7f60a1896a1",
   "mushroom/amethyst": "c48f433d5f604bb38d5fc482753811276eb76f3ae1d676d7e3c782ef45941f59",
@@ -46,6 +46,9 @@ const HASHES: Record<string, string> = {
   "fox/russet": "91d2397ab8c84a453494ae6ec50f761027f91b951f7fe9a526d612ad07f8c53e",
   "fox/arctic": "0cd809cd54cf63e340e5d2171e8b0d34b6f83af7568714f4b43ddfc7f13d0276",
   "fox/silver": "c3bd7c66789e4e2ed3803ab1ef600961bd2d313dd5a55834e0fe1ab29202dcc0",
+  "turkey/autumn": "e6ef254dac6d80fe30ca37940052d237b66217bd3fb08d0e9380218fe9182cb7",
+  "turkey/heritage": "1423a49bbd71514c08e0ec29e48456a3d3ec270faa0744958b3ae9e96b829061",
+  "turkey/harvest": "b476c31f34631b3049dd7e4a61e6f97f1e432d93f357495e1e165d7977bd27b1",
 };
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
